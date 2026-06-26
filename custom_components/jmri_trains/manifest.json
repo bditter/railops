@@ -1,9 +1,9 @@
 {
   "domain": "jmri_trains",
-  "name": "JMRI Trains",
+  "name": "Train Control",
   "codeowners": [],
   "config_flow": true,
-  "documentation": "https://github.com/custom-components/jmri_trains",
+  "documentation": "https://github.com/bditter/train-control",
   "integration_type": "hub",
   "iot_class": "local_push",
   "requirements": [],

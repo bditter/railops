@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Connect to JMRI",
+        "title": "Connect Train Control to JMRI",
         "description": "Enter the host and web server port for the JMRI Web Server JSON servlet.",
         "data": {
           "host": "Host",

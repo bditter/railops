@@ -1,8 +1,8 @@
-# JMRI Trains for Home Assistant
+# Train Control for Home Assistant
 
 Custom Home Assistant integration for controlling model trains through the JMRI JSON WebSocket API.
 
-![JMRI Trains banner](artwork/jmri-trains-banner-v1.png)
+![Train Control banner](artwork/train-control-banner-v1.png)
 
 ## Version
 
@@ -20,7 +20,7 @@ JMRI must have the Web Server running. By default this is usually `http://<jmri-
 
 Copy `custom_components/jmri_trains` into your Home Assistant `custom_components` directory and restart Home Assistant.
 
-Then add the integration from **Settings > Devices & services > Add integration > JMRI Trains**.
+Then add the integration from **Settings > Devices & services > Add integration > Train Control**.
 
 ## Add a train
 
