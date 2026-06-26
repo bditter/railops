@@ -14,15 +14,20 @@ from .client import DccExClient, DccExConnectionError
 from .const import (
     ACCESSORY_MODE_DCC,
     ACCESSORY_MODE_FUNCTION,
+    CONTROL_TYPE_BUTTON,
+    CONTROL_TYPE_SWITCH,
     ATTR_ACCESSORY_ID,
     ATTR_ADDRESS,
+    ATTR_CONTROL_TYPE,
     ATTR_FUNCTION_NAME,
     ATTR_FUNCTION_NUMBER,
+    ATTR_FUNCTION_CONTROLS,
     ATTR_FUNCTIONS,
     ATTR_INVERTED,
     ATTR_MODE,
     ATTR_NAME,
     ATTR_OUTPUT,
+    ATTR_PULSE_DURATION,
     ATTR_SUBADDRESS,
     ATTR_TRAIN_ID,
     DEFAULT_PORT,
@@ -105,6 +110,7 @@ class RailOpsOptionsFlow(config_entries.OptionsFlow):
                     "edit_train": "Edit locomotive",
                     "remove_train": "Remove locomotive",
                     "set_function_mapping": "Set function mapping",
+                    "set_function_control": "Set function control type",
                     "remove_function_mapping": "Remove function mapping",
                 }
             )
@@ -265,6 +271,7 @@ class RailOpsOptionsFlow(config_entries.OptionsFlow):
             name = _normalize_function_name(user_input[ATTR_FUNCTION_NAME])
             functions[name] = user_input[ATTR_FUNCTION_NUMBER]
             train[ATTR_FUNCTIONS] = functions
+            _set_function_control_data(train, user_input)
             return self._create_entry(trains, self._accessories_by_id)
         return self.async_show_form(
             step_id="set_function_mapping",
@@ -273,6 +280,47 @@ class RailOpsOptionsFlow(config_entries.OptionsFlow):
                     vol.Required(ATTR_TRAIN_ID): vol.In(self._train_names),
                     vol.Required(ATTR_FUNCTION_NAME): str,
                     vol.Required(ATTR_FUNCTION_NUMBER): _whole_number_selector(0, 28),
+                    vol.Required(
+                        ATTR_CONTROL_TYPE, default=CONTROL_TYPE_SWITCH
+                    ): vol.In(
+                        {
+                            CONTROL_TYPE_SWITCH: "Switch",
+                            CONTROL_TYPE_BUTTON: "Button",
+                        }
+                    ),
+                    vol.Optional(ATTR_PULSE_DURATION, default=0.35): vol.All(
+                        vol.Coerce(float), vol.Range(min=0.05, max=10)
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_set_function_control(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Set function control type."""
+        if user_input is not None:
+            trains = self._trains_by_id
+            train = trains[user_input[ATTR_TRAIN_ID]]
+            _set_function_control_data(train, user_input)
+            return self._create_entry(trains, self._accessories_by_id)
+        return self.async_show_form(
+            step_id="set_function_control",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(ATTR_TRAIN_ID): vol.In(self._train_names),
+                    vol.Required(ATTR_FUNCTION_NUMBER): _whole_number_selector(0, 28),
+                    vol.Required(
+                        ATTR_CONTROL_TYPE, default=CONTROL_TYPE_SWITCH
+                    ): vol.In(
+                        {
+                            CONTROL_TYPE_SWITCH: "Switch",
+                            CONTROL_TYPE_BUTTON: "Button",
+                        }
+                    ),
+                    vol.Optional(ATTR_PULSE_DURATION, default=0.35): vol.All(
+                        vol.Coerce(float), vol.Range(min=0.05, max=10)
+                    ),
                 }
             ),
         )
@@ -367,7 +415,24 @@ def _normalize_train(data: dict[str, Any]) -> dict[str, Any]:
     }
     if ATTR_FUNCTIONS in data:
         train[ATTR_FUNCTIONS] = data[ATTR_FUNCTIONS]
+    if ATTR_FUNCTION_CONTROLS in data:
+        train[ATTR_FUNCTION_CONTROLS] = data[ATTR_FUNCTION_CONTROLS]
+    if "function_pulse_durations" in data:
+        train["function_pulse_durations"] = data["function_pulse_durations"]
     return train
+
+
+def _set_function_control_data(train: dict[str, Any], data: dict[str, Any]) -> None:
+    """Set function control type and pulse duration on train options."""
+    function_number = int(data[ATTR_FUNCTION_NUMBER])
+    controls = dict(train.get(ATTR_FUNCTION_CONTROLS, {}))
+    controls[str(function_number)] = data[ATTR_CONTROL_TYPE]
+    train[ATTR_FUNCTION_CONTROLS] = controls
+
+    if data[ATTR_CONTROL_TYPE] == CONTROL_TYPE_BUTTON:
+        durations = dict(train.get("function_pulse_durations", {}))
+        durations[str(function_number)] = float(data.get(ATTR_PULSE_DURATION, 0.35))
+        train["function_pulse_durations"] = durations
 
 
 def _accessory_schema(accessory: dict[str, Any] | None = None) -> vol.Schema:

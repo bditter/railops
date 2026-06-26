@@ -27,6 +27,7 @@ async def async_setup_entry(
         entities.extend(
             RailOpsFunctionSwitch(entry, client, train, function_number)
             for function_number in range(29)
+            if train.function_control_type(function_number) == "switch"
         )
     entities.extend(
         RailOpsAccessorySwitch(entry, client, AccessoryConfig.from_dict(accessory))

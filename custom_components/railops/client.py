@@ -26,6 +26,9 @@ DEFAULT_FUNCTION_MAP: dict[str, int] = {
     "dim_headlight": 7,
     "mute": 8,
 }
+DEFAULT_FUNCTION_CONTROL = "switch"
+FUNCTION_CONTROL_TYPES = {"switch", "button"}
+DEFAULT_FUNCTION_PULSE_DURATION = 0.35
 LOCO_BROADCAST = re.compile(
     r"^<l\s+(?P<cab>\d+)\s+\d+\s+(?P<speed>\d+)\s+(?P<functions>\d+)>$"
 )
@@ -47,6 +50,8 @@ class TrainConfig:
     name: str
     address: int
     functions: dict[str, int]
+    function_controls: dict[int, str]
+    function_pulse_durations: dict[int, float]
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "TrainConfig":
@@ -56,6 +61,12 @@ class TrainConfig:
             name=data.get("name") or data["train_id"],
             address=int(data["address"]),
             functions=normalize_function_map(data.get("functions")),
+            function_controls=normalize_function_controls(
+                data.get("function_controls")
+            ),
+            function_pulse_durations=normalize_function_pulse_durations(
+                data.get("function_pulse_durations")
+            ),
         )
 
     def resolve_function(self, function: int | str) -> int:
@@ -72,6 +83,16 @@ class TrainConfig:
             raise ValueError(f"Unknown function mapping: {function}")
         return self.functions[key]
 
+    def function_control_type(self, function_number: int) -> str:
+        """Return switch or button for a function."""
+        return self.function_controls.get(function_number, DEFAULT_FUNCTION_CONTROL)
+
+    def function_pulse_duration(self, function_number: int) -> float:
+        """Return pulse duration for a function button."""
+        return self.function_pulse_durations.get(
+            function_number, DEFAULT_FUNCTION_PULSE_DURATION
+        )
+
 
 def normalize_function_map(functions: Any) -> dict[str, int]:
     """Normalize train function mappings."""
@@ -86,6 +107,41 @@ def normalize_function_map(functions: Any) -> dict[str, int]:
         function_number = int(value)
         if 0 <= function_number <= 28:
             normalized[key] = function_number
+    return normalized
+
+
+def normalize_function_controls(function_controls: Any) -> dict[int, str]:
+    """Normalize function control type mappings."""
+    normalized: dict[int, str] = {}
+    if not isinstance(function_controls, dict):
+        return normalized
+    for number, control_type in function_controls.items():
+        value = str(number).strip().upper().removeprefix("F")
+        if not value.isdigit():
+            continue
+        function_number = int(value)
+        control_value = str(control_type).strip().lower()
+        if 0 <= function_number <= 28 and control_value in FUNCTION_CONTROL_TYPES:
+            normalized[function_number] = control_value
+    return normalized
+
+
+def normalize_function_pulse_durations(durations: Any) -> dict[int, float]:
+    """Normalize function button pulse durations."""
+    normalized: dict[int, float] = {}
+    if not isinstance(durations, dict):
+        return normalized
+    for number, duration in durations.items():
+        value = str(number).strip().upper().removeprefix("F")
+        if not value.isdigit():
+            continue
+        function_number = int(value)
+        try:
+            duration_value = float(duration)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= function_number <= 28:
+            normalized[function_number] = max(0.05, min(10.0, duration_value))
     return normalized
 
 
@@ -139,7 +195,8 @@ class DccExClient:
         self._known_forward: dict[int, bool] = {}
         self._known_functions: dict[int, dict[int, bool]] = {}
         self._accessory_states: dict[str, bool] = {}
-        self._power_on: bool | None = None
+        self._acquired_trains: set[int] = set()
+        self._power_on = False
         self.connected = False
 
     @property
@@ -241,7 +298,7 @@ class DccExClient:
         self._power_on = on
         await self.async_send_raw(f"<{1 if on else 0} {track}>")
 
-    def get_power_state(self) -> bool | None:
+    def get_power_state(self) -> bool:
         """Return the last commanded power state."""
         return self._power_on
 
@@ -253,17 +310,31 @@ class DccExClient:
         """Return the last known direction for an address."""
         return self._known_forward.get(address, True)
 
-    def get_function_state(self, address: int, function_number: int) -> bool | None:
+    def get_function_state(self, address: int, function_number: int) -> bool:
         """Return the last known function state for an address."""
-        return self._known_functions.get(address, {}).get(function_number)
+        return self._known_functions.get(address, {}).get(function_number, False)
 
-    def get_accessory_state(self, accessory_id: str) -> bool | None:
+    def get_accessory_state(self, accessory_id: str) -> bool:
         """Return the last known accessory state."""
-        return self._accessory_states.get(accessory_id)
+        return self._accessory_states.get(accessory_id, False)
+
+    def is_train_acquired(self, train: TrainConfig) -> bool:
+        """Return whether RailOps has marked a train active."""
+        return train.address in self._acquired_trains
 
     async def async_query_train(self, train: TrainConfig) -> None:
         """Query current locomotive state."""
         await self.async_send_raw(f"<t {train.address}>")
+
+    async def async_acquire_train(self, train: TrainConfig) -> None:
+        """Acquire a train for active control in RailOps."""
+        self._acquired_trains.add(train.address)
+        await self.async_query_train(train)
+
+    async def async_release_train(self, train: TrainConfig) -> None:
+        """Release a train from active RailOps control."""
+        self._acquired_trains.discard(train.address)
+        await self.async_query_train(train)
 
     async def async_set_speed(self, train: TrainConfig, speed: int) -> None:
         """Set throttle speed from 0 to 126."""

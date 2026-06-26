@@ -26,9 +26,16 @@ async def async_setup_entry(
         train = TrainConfig.from_dict(train_data)
         entities.extend(
             [
+                RailOpsTrainAcquireButton(entry, client, train),
+                RailOpsTrainReleaseButton(entry, client, train),
                 RailOpsTrainStopButton(entry, client, train),
                 RailOpsTrainEmergencyStopButton(entry, client, train),
             ]
+        )
+        entities.extend(
+            RailOpsFunctionButton(entry, client, train, function_number)
+            for function_number in range(29)
+            if train.function_control_type(function_number) == "button"
         )
     async_add_entities(entities)
 
@@ -67,6 +74,42 @@ class RailOpsTrainStopButton(RailOpsTrainEntity, ButtonEntity):
         await self._client.async_stop(self._train)
 
 
+class RailOpsTrainAcquireButton(RailOpsTrainEntity, ButtonEntity):
+    """Train acquire button."""
+
+    _attr_icon = "mdi:train"
+
+    def __init__(
+        self, entry: ConfigEntry, client: DccExClient, train: TrainConfig
+    ) -> None:
+        """Initialize the acquire button."""
+        super().__init__(entry, client, train)
+        self._attr_unique_id = f"train_{entry.entry_id}_{train.train_id}_acquire"
+        self._attr_name = "Acquire"
+
+    async def async_press(self) -> None:
+        """Acquire the train for RailOps control."""
+        await self._client.async_acquire_train(self._train)
+
+
+class RailOpsTrainReleaseButton(RailOpsTrainEntity, ButtonEntity):
+    """Train release button."""
+
+    _attr_icon = "mdi:train"
+
+    def __init__(
+        self, entry: ConfigEntry, client: DccExClient, train: TrainConfig
+    ) -> None:
+        """Initialize the release button."""
+        super().__init__(entry, client, train)
+        self._attr_unique_id = f"train_{entry.entry_id}_{train.train_id}_release"
+        self._attr_name = "Release"
+
+    async def async_press(self) -> None:
+        """Release the train from active RailOps control."""
+        await self._client.async_release_train(self._train)
+
+
 class RailOpsTrainEmergencyStopButton(RailOpsTrainEntity, ButtonEntity):
     """Train emergency stop button."""
 
@@ -83,3 +126,44 @@ class RailOpsTrainEmergencyStopButton(RailOpsTrainEntity, ButtonEntity):
     async def async_press(self) -> None:
         """Emergency stop the train."""
         await self._client.async_emergency_stop(self._train)
+
+
+class RailOpsFunctionButton(RailOpsTrainEntity, ButtonEntity):
+    """Momentary DCC function button."""
+
+    _attr_icon = "mdi:gesture-tap-button"
+
+    def __init__(
+        self,
+        entry: ConfigEntry,
+        client: DccExClient,
+        train: TrainConfig,
+        function_number: int,
+    ) -> None:
+        """Initialize the function button."""
+        super().__init__(entry, client, train)
+        self._function_number = function_number
+        self._attr_unique_id = (
+            f"train_{entry.entry_id}_{train.train_id}_function_{function_number}_button"
+        )
+        self._attr_name = _function_name(train, function_number)
+
+    async def async_press(self) -> None:
+        """Pulse the function."""
+        await self._client.async_pulse_function(
+            self._train,
+            self._function_number,
+            self._train.function_pulse_duration(self._function_number),
+        )
+
+
+def _function_name(train: TrainConfig, function_number: int) -> str:
+    """Return a display name for a function."""
+    aliases = [
+        name.replace("_", " ").title()
+        for name, number in train.functions.items()
+        if number == function_number
+    ]
+    if aliases:
+        return f"F{function_number} {aliases[0]}"
+    return f"F{function_number}"

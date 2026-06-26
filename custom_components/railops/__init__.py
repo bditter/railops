@@ -104,6 +104,23 @@ def _async_remove_legacy_train_entities(
             entity_id = registry.async_get_entity_id("switch", DOMAIN, unique_id)
             if entity_id:
                 registry.async_remove(entity_id)
+        for function_number in range(29):
+            switch_unique_id = (
+                f"train_{entry.entry_id}_{train_id}_function_{function_number}"
+            )
+            button_unique_id = (
+                f"train_{entry.entry_id}_{train_id}_function_{function_number}_button"
+            )
+            if train_config.function_control_type(function_number) == "button":
+                entity_id = registry.async_get_entity_id(
+                    "switch", DOMAIN, switch_unique_id
+                )
+            else:
+                entity_id = registry.async_get_entity_id(
+                    "button", DOMAIN, button_unique_id
+                )
+            if entity_id:
+                registry.async_remove(entity_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

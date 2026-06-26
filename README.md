@@ -6,7 +6,7 @@ Custom Home Assistant integration for controlling model trains directly through 
 
 ## Version
 
-`1.4.1`
+`1.5.0`
 
 ## What it creates
 
@@ -15,6 +15,8 @@ Custom Home Assistant integration for controlling model trains directly through 
 - One train device per configured locomotive.
 - Train controls for speed, direction, stop, emergency stop, and mapped DCC functions.
 - Standard F0-F28 function switches for each locomotive, labeled with friendly mappings when available.
+- Function controls can be configured as toggles or momentary buttons.
+- Locomotive acquire and release buttons for marking active RailOps control.
 - Accessory setup for DCC accessory decoder outputs and function-decoder outputs.
 - Controller and locomotive polling using DCC-EX status and throttle queries.
 - Services to add, edit, remove, stop, emergency stop, power, and control trains.
@@ -149,7 +151,7 @@ data:
 
 DCC-EX throttle speed uses integer speed steps from `0` to `126`. RailOps sends native DCC-EX commands such as `<t cab speed direction>`, `<F cab function state>`, `<!>`, and `<1 MAIN>` / `<0 MAIN>`.
 
-Function mappings accept `F0` through `F28`. RailOps creates standard F0-F28 switches for each locomotive and uses friendly mappings to label them. Default aliases include `headlight`, `bell`, `horn`, `whistle`, `short_horn`, `dynamic_brake`, `ditch_lights`, `mars_light`, `dim_headlight`, and `mute`.
+Function mappings accept `F0` through `F28`. RailOps creates standard F0-F28 controls for each locomotive and uses friendly mappings to label them. Each function can be configured as a toggle switch or momentary button. Default aliases include `headlight`, `bell`, `horn`, `whistle`, `short_horn`, `dynamic_brake`, `ditch_lights`, `mars_light`, `dim_headlight`, and `mute`.
 
 Accessory setup supports two command styles:
 

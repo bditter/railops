@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.0
+
+- Adds per-function control type configuration for toggle switches or momentary buttons.
+- Adds function button entities that pulse the DCC function on/off.
+- Adds locomotive acquire and release buttons.
+- Defaults toggle-style switch states to off when no DCC-EX feedback has arrived yet, so Home Assistant renders toggles instead of lightning-bolt actions after reload.
+- Cleans up stale switch/button entities when a function control type changes.
+
 ## 1.4.1
 
 - Changes Configure number fields for DCC addresses, subaddresses, and function mappings to whole-number box inputs.

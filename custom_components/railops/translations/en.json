@@ -93,7 +93,18 @@
         "data": {
           "train_id": "Locomotive",
           "function_name": "Friendly name",
-          "function_number": "Function number"
+          "function_number": "Function number",
+          "control_type": "Control type",
+          "pulse_duration": "Button pulse duration"
+        }
+      },
+      "set_function_control": {
+        "title": "Set function control type",
+        "data": {
+          "train_id": "Locomotive",
+          "function_number": "Function number",
+          "control_type": "Control type",
+          "pulse_duration": "Button pulse duration"
         }
       },
       "remove_function_mapping": {
@@ -114,6 +125,7 @@
           "edit_accessory": "Edit accessory",
           "remove_accessory": "Remove accessory",
           "set_function_mapping": "Set function mapping",
+          "set_function_control": "Set function control type",
           "remove_function_mapping": "Remove function mapping"
         }
       }
