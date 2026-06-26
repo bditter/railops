@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1
+
+- Replaces the unlabeled Configure menu row with an explicit action dropdown.
+
 ## 1.3.0
 
 - Removes the locomotive telemetry sensor from the default entity model.

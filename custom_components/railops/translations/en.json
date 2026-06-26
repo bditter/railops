@@ -18,16 +18,14 @@
     }
   },
   "options": {
-    "menu": {
-      "init": {
-        "add_train": "Add locomotive",
-        "edit_train": "Edit locomotive",
-        "remove_train": "Remove locomotive",
-        "set_function_mapping": "Set function mapping",
-        "remove_function_mapping": "Remove function mapping"
-      }
-    },
     "step": {
+      "init": {
+        "title": "Configure RailOps",
+        "description": "Choose what you want to manage.",
+        "data": {
+          "action": "Action"
+        }
+      },
       "add_train": {
         "title": "Add locomotive",
         "data": {
@@ -68,6 +66,17 @@
         "data": {
           "train_id": "Locomotive",
           "function_name": "Friendly name"
+        }
+      }
+    },
+    "selector": {
+      "action": {
+        "options": {
+          "add_train": "Add locomotive",
+          "edit_train": "Edit locomotive",
+          "remove_train": "Remove locomotive",
+          "set_function_mapping": "Set function mapping",
+          "remove_function_mapping": "Remove function mapping"
         }
       }
     },

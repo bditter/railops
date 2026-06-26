@@ -84,18 +84,25 @@ class RailOpsOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Show the RailOps management menu."""
-        menu_options = ["add_train"]
+        """Show the RailOps management form."""
+        actions = {
+            "add_train": "Add locomotive",
+        }
         if self._trains_by_id:
-            menu_options.extend(
-                [
-                    "edit_train",
-                    "remove_train",
-                    "set_function_mapping",
-                    "remove_function_mapping",
-                ]
+            actions.update(
+                {
+                    "edit_train": "Edit locomotive",
+                    "remove_train": "Remove locomotive",
+                    "set_function_mapping": "Set function mapping",
+                    "remove_function_mapping": "Remove function mapping",
+                }
             )
-        return self.async_show_menu(step_id="init", menu_options=menu_options)
+        if user_input is not None:
+            return await getattr(self, f"async_step_{user_input['action']}")()
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({vol.Required("action"): vol.In(actions)}),
+        )
 
     async def async_step_add_train(
         self, user_input: dict[str, Any] | None = None
