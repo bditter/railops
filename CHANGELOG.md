@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0
+
+- Removes the locomotive telemetry sensor from the default entity model.
+- Cleans up older locomotive telemetry sensor entities on startup.
+- Creates stable F0-F28 function switches for each locomotive.
+- Uses friendly function mappings to label standard function switches.
+- Uses Home Assistant platform enums for setup forwarding.
+
 ## 1.2.0
 
 - Adds visible Home Assistant controls for RailOps instead of service-only control.
@@ -31,4 +39,4 @@
 - Adds a Home Assistant config flow for a JMRI Web Server controller.
 - Adds one controller sensor and one train sensor per configured train.
 - Adds services to add, update, remove, stop, emergency stop, release, and control trains.
-- Adds Train Control artwork for the integration.
+- Adds project artwork for the integration.

@@ -69,6 +69,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady(f"Unable to connect to DCC-EX: {err}") from err
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {DATA_CLIENT: client}
+    _async_remove_legacy_train_entities(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await _async_register_services(hass)
@@ -78,6 +79,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload RailOps when options change."""
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+def _async_remove_legacy_train_entities(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Remove entities from earlier RailOps train telemetry/function designs."""
+    registry = er.async_get(hass)
+    for train in entry.options.get(OPT_TRAINS, []):
+        train_id = train[ATTR_TRAIN_ID]
+        train_config = TrainConfig.from_dict(train)
+        legacy_unique_ids = [f"train_{entry.entry_id}_{train_id}"]
+        legacy_unique_ids.extend(
+            f"train_{entry.entry_id}_{train_id}_function_{name}"
+            for name in train_config.functions
+        )
+        for unique_id in legacy_unique_ids:
+            entity_id = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+            if entity_id:
+                registry.async_remove(entity_id)
+            entity_id = registry.async_get_entity_id("switch", DOMAIN, unique_id)
+            if entity_id:
+                registry.async_remove(entity_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
