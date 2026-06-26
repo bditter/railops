@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.1
+
+- Sends DCC-EX's native `<- cab>` locomotive release command from release buttons.
+- Stops querying a locomotive during release so DCC-EX does not immediately re-add it to active reminders.
+
 ## 1.5.0
 
 - Adds per-function control type configuration for toggle switches or momentary buttons.

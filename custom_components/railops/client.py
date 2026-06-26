@@ -334,7 +334,7 @@ class DccExClient:
     async def async_release_train(self, train: TrainConfig) -> None:
         """Release a train from active RailOps control."""
         self._acquired_trains.discard(train.address)
-        await self.async_query_train(train)
+        await self.async_send_raw(f"<- {train.address}>")
 
     async def async_set_speed(self, train: TrainConfig, speed: int) -> None:
         """Set throttle speed from 0 to 126."""
@@ -473,6 +473,9 @@ class DccExClient:
         if not match:
             if message.startswith("<p"):
                 self._power_on = "0" not in message[:4]
+            elif message.startswith("<-"):
+                _LOGGER.debug("DCC-EX released locomotive: %s", message)
+                return
             _LOGGER.debug("Unhandled DCC-EX message: %s", message)
             return
         address = int(match.group("cab"))
