@@ -53,6 +53,41 @@
           "train_id": "Locomotive"
         }
       },
+      "add_accessory": {
+        "title": "Add accessory",
+        "data": {
+          "accessory_id": "Accessory ID",
+          "name": "Name",
+          "mode": "Type",
+          "address": "DCC address",
+          "subaddress": "Subaddress",
+          "output": "Function/output number",
+          "inverted": "Invert output"
+        }
+      },
+      "edit_accessory": {
+        "title": "Choose accessory",
+        "data": {
+          "accessory_id": "Accessory"
+        }
+      },
+      "edit_accessory_details": {
+        "title": "Edit accessory",
+        "data": {
+          "name": "Name",
+          "mode": "Type",
+          "address": "DCC address",
+          "subaddress": "Subaddress",
+          "output": "Function/output number",
+          "inverted": "Invert output"
+        }
+      },
+      "remove_accessory": {
+        "title": "Remove accessory",
+        "data": {
+          "accessory_id": "Accessory"
+        }
+      },
       "set_function_mapping": {
         "title": "Set function mapping",
         "data": {
@@ -73,15 +108,19 @@
       "action": {
         "options": {
           "add_train": "Add locomotive",
+          "add_accessory": "Add accessory",
           "edit_train": "Edit locomotive",
           "remove_train": "Remove locomotive",
+          "edit_accessory": "Edit accessory",
+          "remove_accessory": "Remove accessory",
           "set_function_mapping": "Set function mapping",
           "remove_function_mapping": "Remove function mapping"
         }
       }
     },
     "error": {
-      "train_exists": "That locomotive ID already exists."
+      "train_exists": "That locomotive ID already exists.",
+      "accessory_exists": "That accessory ID already exists."
     }
   }
 }

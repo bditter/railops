@@ -12,6 +12,7 @@ from typing import Any
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_READ_LIMIT = 65536
+HEARTBEAT_INTERVAL = 10
 DEFAULT_FUNCTION_MAP: dict[str, int] = {
     "headlight": 0,
     "bell": 1,
@@ -90,6 +91,33 @@ def normalize_function_map(functions: Any) -> dict[str, int]:
 
 TrainUpdateCallback = Callable[[dict[str, Any]], None]
 ConnectionCallback = Callable[[bool], None]
+AccessoryUpdateCallback = Callable[[str, bool], None]
+
+
+@dataclass(slots=True)
+class AccessoryConfig:
+    """Stored accessory configuration."""
+
+    accessory_id: str
+    name: str
+    mode: str
+    address: int
+    subaddress: int | None = None
+    output: int | None = None
+    inverted: bool = False
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "AccessoryConfig":
+        """Create config from persisted data."""
+        return cls(
+            accessory_id=data["accessory_id"],
+            name=data.get("name") or data["accessory_id"],
+            mode=data.get("mode", "dcc_accessory"),
+            address=int(data["address"]),
+            subaddress=data.get("subaddress"),
+            output=data.get("output"),
+            inverted=bool(data.get("inverted", False)),
+        )
 
 
 class DccExClient:
@@ -102,12 +130,15 @@ class DccExClient:
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._reader_task: asyncio.Task | None = None
+        self._heartbeat_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
         self._train_callbacks: dict[int, set[TrainUpdateCallback]] = {}
+        self._accessory_callbacks: dict[str, set[AccessoryUpdateCallback]] = {}
         self._connection_callbacks: set[ConnectionCallback] = set()
         self._known_speed: dict[int, int] = {}
         self._known_forward: dict[int, bool] = {}
         self._known_functions: dict[int, dict[int, bool]] = {}
+        self._accessory_states: dict[str, bool] = {}
         self._power_on: bool | None = None
         self.connected = False
 
@@ -147,17 +178,45 @@ class DccExClient:
 
         return _unsubscribe
 
+    def subscribe_accessory(
+        self, accessory_id: str, callback: AccessoryUpdateCallback
+    ) -> Callable[[], None]:
+        """Subscribe to accessory state updates."""
+        callbacks = self._accessory_callbacks.setdefault(accessory_id, set())
+        callbacks.add(callback)
+
+        def _unsubscribe() -> None:
+            callbacks.discard(callback)
+            if not callbacks:
+                self._accessory_callbacks.pop(accessory_id, None)
+
+        return _unsubscribe
+
     def subscribe_connection(self, callback: ConnectionCallback) -> Callable[[], None]:
         """Subscribe to connection state changes."""
         self._connection_callbacks.add(callback)
+        callback(self.connected)
 
         def _unsubscribe() -> None:
             self._connection_callbacks.discard(callback)
 
         return _unsubscribe
 
+    async def async_start_polling(self, trains: list[TrainConfig]) -> None:
+        """Start polling command station and configured trains."""
+        if self._heartbeat_task and not self._heartbeat_task.done():
+            return
+        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop(trains))
+
     async def async_close(self) -> None:
         """Close the TCP connection."""
+        if self._heartbeat_task:
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            self._heartbeat_task = None
         if self._reader_task:
             self._reader_task.cancel()
             try:
@@ -198,6 +257,14 @@ class DccExClient:
         """Return the last known function state for an address."""
         return self._known_functions.get(address, {}).get(function_number)
 
+    def get_accessory_state(self, accessory_id: str) -> bool | None:
+        """Return the last known accessory state."""
+        return self._accessory_states.get(accessory_id)
+
+    async def async_query_train(self, train: TrainConfig) -> None:
+        """Query current locomotive state."""
+        await self.async_send_raw(f"<t {train.address}>")
+
     async def async_set_speed(self, train: TrainConfig, speed: int) -> None:
         """Set throttle speed from 0 to 126."""
         speed = max(0, min(126, speed))
@@ -218,6 +285,25 @@ class DccExClient:
         await self.async_send_raw(
             f"<F {train.address} {function_number} {1 if enabled else 0}>"
         )
+
+    async def async_set_accessory(
+        self, accessory: AccessoryConfig, enabled: bool
+    ) -> None:
+        """Set accessory or function-decoder output state."""
+        state = not enabled if accessory.inverted else enabled
+        self._accessory_states[accessory.accessory_id] = enabled
+        if accessory.mode == "function_decoder":
+            await self.async_send_raw(
+                f"<F {accessory.address} {accessory.output or 0} {1 if state else 0}>"
+            )
+        else:
+            await self.async_send_raw(
+                (
+                    f"<a {accessory.address} {accessory.subaddress or 0} "
+                    f"{1 if state else 0}>"
+                )
+            )
+        self._notify_accessory(accessory.accessory_id, enabled)
 
     async def async_pulse_function(
         self, train: TrainConfig, function: int | str, duration: float
@@ -279,6 +365,18 @@ class DccExClient:
         self._set_connected(True)
         self._reader_task = asyncio.create_task(self._read_loop())
 
+    async def _heartbeat_loop(self, trains: list[TrainConfig]) -> None:
+        """Poll command station status and configured locomotives."""
+        while True:
+            try:
+                await self.async_send_raw("<s>")
+                for train in trains:
+                    await self.async_query_train(train)
+            except (DccExConnectionError, DccExCommandError, OSError) as err:
+                _LOGGER.debug("DCC-EX heartbeat failed: %s", err)
+                self._set_connected(False)
+            await asyncio.sleep(HEARTBEAT_INTERVAL)
+
     async def _read_loop(self) -> None:
         """Read and dispatch DCC-EX replies."""
         buffer = ""
@@ -302,6 +400,8 @@ class DccExClient:
         """Handle one DCC-EX response message."""
         match = LOCO_BROADCAST.match(message)
         if not match:
+            if message.startswith("<p"):
+                self._power_on = "0" not in message[:4]
             _LOGGER.debug("Unhandled DCC-EX message: %s", message)
             return
         address = int(match.group("cab"))
@@ -323,6 +423,11 @@ class DccExClient:
         }
         for callback in list(self._train_callbacks.get(address, ())):
             callback(data)
+
+    def _notify_accessory(self, accessory_id: str, enabled: bool) -> None:
+        """Notify accessory subscribers."""
+        for callback in list(self._accessory_callbacks.get(accessory_id, ())):
+            callback(accessory_id, enabled)
 
     def _set_connected(self, connected: bool) -> None:
         """Update connection state."""

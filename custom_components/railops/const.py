@@ -24,6 +24,7 @@ DATA_CLIENT: Final = "client"
 DATA_UNSUB_LISTENERS: Final = "unsub_listeners"
 
 OPT_TRAINS: Final = "trains"
+OPT_ACCESSORIES: Final = "accessories"
 
 ATTR_ENTRY_ID: Final = "entry_id"
 ATTR_TRAIN_ID: Final = "train_id"
@@ -38,6 +39,14 @@ ATTR_FUNCTION_NUMBER: Final = "function_number"
 ATTR_ENABLED: Final = "enabled"
 ATTR_TRACK: Final = "track"
 ATTR_DURATION: Final = "duration"
+ATTR_ACCESSORY_ID: Final = "accessory_id"
+ATTR_MODE: Final = "mode"
+ATTR_SUBADDRESS: Final = "subaddress"
+ATTR_OUTPUT: Final = "output"
+ATTR_INVERTED: Final = "inverted"
+
+ACCESSORY_MODE_DCC: Final = "dcc_accessory"
+ACCESSORY_MODE_FUNCTION: Final = "function_decoder"
 
 SERVICE_ADD_TRAIN: Final = "add_train"
 SERVICE_UPDATE_TRAIN: Final = "update_train"

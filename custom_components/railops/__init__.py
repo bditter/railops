@@ -72,6 +72,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _async_remove_legacy_train_entities(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await client.async_start_polling(
+        [TrainConfig.from_dict(train) for train in entry.options.get(OPT_TRAINS, [])]
+    )
     await _async_register_services(hass)
     return True
 

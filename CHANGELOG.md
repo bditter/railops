@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0
+
+- Adds heartbeat polling with `<s>` and configured locomotive `<t cab>` queries.
+- Immediately reports current connection state to controller entities.
+- Adds accessory configuration for DCC accessory decoder outputs.
+- Adds function-decoder accessory mode for boards such as Digitrax TF4-style outputs.
+- Adds accessory switch entities.
+
 ## 1.3.1
 
 - Replaces the unlabeled Configure menu row with an explicit action dropdown.
