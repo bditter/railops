@@ -1,0 +1,124 @@
+add_train:
+  fields:
+    entry_id:
+      selector:
+        text:
+    train_id:
+      required: true
+      selector:
+        text:
+    name:
+      selector:
+        text:
+    address:
+      selector:
+        number:
+          min: 1
+          max: 9999
+          mode: box
+    roster_entry:
+      selector:
+        text:
+    is_long_address:
+      selector:
+        boolean:
+    prefix:
+      selector:
+        text:
+
+update_train:
+  fields:
+    entry_id:
+      selector:
+        text:
+    train_id:
+      required: true
+      selector:
+        text:
+    name:
+      selector:
+        text:
+    address:
+      selector:
+        number:
+          min: 1
+          max: 9999
+          mode: box
+    roster_entry:
+      selector:
+        text:
+    is_long_address:
+      selector:
+        boolean:
+    prefix:
+      selector:
+        text:
+
+remove_train:
+  fields:
+    entry_id:
+      selector:
+        text:
+    train_id:
+      required: true
+      selector:
+        text:
+
+set_speed:
+  target:
+    entity:
+      integration: jmri_trains
+      domain: sensor
+  fields:
+    speed:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.01
+          mode: slider
+
+set_direction:
+  target:
+    entity:
+      integration: jmri_trains
+      domain: sensor
+  fields:
+    forward:
+      required: true
+      selector:
+        boolean:
+
+set_function:
+  target:
+    entity:
+      integration: jmri_trains
+      domain: sensor
+  fields:
+    function:
+      required: true
+      selector:
+        text:
+    enabled:
+      required: true
+      selector:
+        boolean:
+
+stop:
+  target:
+    entity:
+      integration: jmri_trains
+      domain: sensor
+
+emergency_stop:
+  target:
+    entity:
+      integration: jmri_trains
+      domain: sensor
+
+release_train:
+  target:
+    entity:
+      integration: jmri_trains
+      domain: sensor

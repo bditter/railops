@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to JMRI",
+        "description": "Enter the host and web server port for the JMRI Web Server JSON servlet.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "ssl": "Use SSL",
+          "verify_ssl": "Verify SSL certificate"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to JMRI."
+    },
+    "abort": {
+      "already_configured": "This JMRI controller is already configured."
+    }
+  }
+}
