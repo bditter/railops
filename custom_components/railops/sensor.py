@@ -1,4 +1,4 @@
-"""Sensor entities for JMRI Trains."""
+"""Sensor entities for RailOps."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .client import JmriClient, TrainConfig
+from .client import DccExClient, TrainConfig
 from .const import DATA_CLIENT, DOMAIN, OPT_TRAINS
 
 
@@ -21,23 +21,23 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up JMRI sensor entities."""
-    client: JmriClient = hass.data[DOMAIN][entry.entry_id][DATA_CLIENT]
-    entities: list[SensorEntity] = [JmriControllerSensor(entry, client)]
+    """Set up RailOps sensor entities."""
+    client: DccExClient = hass.data[DOMAIN][entry.entry_id][DATA_CLIENT]
+    entities: list[SensorEntity] = [RailOpsControllerSensor(entry, client)]
     entities.extend(
-        JmriTrainSensor(entry, client, TrainConfig.from_dict(train))
+        RailOpsTrainSensor(entry, client, TrainConfig.from_dict(train))
         for train in entry.options.get(OPT_TRAINS, [])
     )
     async_add_entities(entities)
 
 
-class JmriControllerSensor(SensorEntity):
-    """Controller entity representing the JMRI server."""
+class RailOpsControllerSensor(SensorEntity):
+    """Controller entity representing the DCC-EX command station."""
 
     _attr_icon = "mdi:train"
     _attr_has_entity_name = True
 
-    def __init__(self, entry: ConfigEntry, client: JmriClient) -> None:
+    def __init__(self, entry: ConfigEntry, client: DccExClient) -> None:
         """Initialize the controller sensor."""
         self._entry = entry
         self._client = client
@@ -52,8 +52,7 @@ class JmriControllerSensor(SensorEntity):
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry.entry_id)},
             name=self._entry.title,
-            manufacturer="JMRI",
-            configuration_url=self._client.base_url,
+            manufacturer="DCC-EX",
         )
 
     @property
@@ -63,7 +62,7 @@ class JmriControllerSensor(SensorEntity):
             "host": self._entry.data[CONF_HOST],
             "port": self._entry.data[CONF_PORT],
             "configured_trains": len(self._entry.options.get(OPT_TRAINS, [])),
-            "websocket_url": self._client.websocket_url,
+            "dcc_ex_address": self._client.address,
         }
 
     async def async_added_to_hass(self) -> None:
@@ -82,14 +81,14 @@ class JmriControllerSensor(SensorEntity):
         self.async_write_ha_state()
 
 
-class JmriTrainSensor(SensorEntity):
-    """Train entity backed by a JMRI throttle."""
+class RailOpsTrainSensor(SensorEntity):
+    """Train entity backed by a DCC-EX cab address."""
 
     _attr_icon = "mdi:train-car"
     _attr_has_entity_name = True
 
     def __init__(
-        self, entry: ConfigEntry, client: JmriClient, train: TrainConfig
+        self, entry: ConfigEntry, client: DccExClient, train: TrainConfig
     ) -> None:
         """Initialize the train sensor."""
         self._entry = entry
@@ -107,8 +106,7 @@ class JmriTrainSensor(SensorEntity):
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry.entry_id)},
             name=self._entry.title,
-            manufacturer="JMRI",
-            configuration_url=self._client.base_url,
+            manufacturer="DCC-EX",
         )
 
     @property
@@ -117,22 +115,19 @@ class JmriTrainSensor(SensorEntity):
         attrs = {
             "train_id": self._train.train_id,
             "address": self._train.address,
-            "roster_entry": self._train.roster_entry,
-            "prefix": self._train.prefix,
+            "function_map": self._train.functions,
         }
         attrs.update(self._state)
         return attrs
 
     async def async_added_to_hass(self) -> None:
-        """Subscribe to JMRI throttle updates."""
-        self._unsub = self._client.subscribe_train(self._train.train_id, self._update)
-        await self._client.async_acquire_throttle(self._train)
+        """Subscribe to DCC-EX cab broadcasts."""
+        self._unsub = self._client.subscribe_train(self._train.address, self._update)
 
     async def async_will_remove_from_hass(self) -> None:
-        """Release the train throttle when removed."""
+        """Unsubscribe from train updates."""
         if self._unsub:
             self._unsub()
-        await self._client.async_release_throttle(self._train)
 
     @callback
     def _update(self, data: dict[str, Any]) -> None:
@@ -144,5 +139,5 @@ class JmriTrainSensor(SensorEntity):
             self._attr_native_value = "available"
         else:
             label = "forward" if direction else "reverse"
-            self._attr_native_value = f"{speed:.2f} {label}"
+            self._attr_native_value = f"{speed} {label}"
         self.async_write_ha_state()

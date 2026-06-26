@@ -1,4 +1,4 @@
-"""Config flow for JMRI Trains."""
+"""Config flow for RailOps."""
 
 from __future__ import annotations
 
@@ -7,15 +7,14 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SSL, CONF_VERIFY_SSL
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.const import CONF_HOST, CONF_PORT
 
-from .client import JmriClient, JmriConnectionError
-from .const import DEFAULT_PORT, DEFAULT_SSL, DEFAULT_VERIFY_SSL, DOMAIN
+from .client import DccExClient, DccExConnectionError
+from .const import DEFAULT_PORT, DOMAIN
 
 
-class JmriTrainsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a JMRI Trains config flow."""
+class RailOpsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a RailOps config flow."""
 
     VERSION = 1
 
@@ -26,16 +25,13 @@ class JmriTrainsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            client = JmriClient(
-                async_get_clientsession(self.hass),
+            client = DccExClient(
                 user_input[CONF_HOST],
                 user_input[CONF_PORT],
-                user_input[CONF_SSL],
-                user_input[CONF_VERIFY_SSL],
             )
             try:
                 await client.async_test_connection()
-            except JmriConnectionError:
+            except DccExConnectionError:
                 errors["base"] = "cannot_connect"
             else:
                 await self.async_set_unique_id(
@@ -43,7 +39,7 @@ class JmriTrainsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
-                    title=f"JMRI {user_input[CONF_HOST]}:{user_input[CONF_PORT]}",
+                    title=f"RailOps {user_input[CONF_HOST]}:{user_input[CONF_PORT]}",
                     data=user_input,
                     options={"trains": []},
                 )
@@ -54,8 +50,6 @@ class JmriTrainsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required(CONF_HOST): str,
                     vol.Optional(CONF_PORT, default=DEFAULT_PORT): int,
-                    vol.Optional(CONF_SSL, default=DEFAULT_SSL): bool,
-                    vol.Optional(CONF_VERIFY_SSL, default=DEFAULT_VERIFY_SSL): bool,
                 }
             ),
             errors=errors,

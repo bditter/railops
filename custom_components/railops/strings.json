@@ -1,0 +1,20 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect RailOps to DCC-EX",
+        "description": "Enter the host and TCP port for the DCC-EX command station.",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to DCC-EX."
+    },
+    "abort": {
+      "already_configured": "This DCC-EX command station is already configured."
+    }
+  }
+}
