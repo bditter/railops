@@ -29,6 +29,10 @@ DEFAULT_FUNCTION_MAP: dict[str, int] = {
 DEFAULT_FUNCTION_CONTROL = "switch"
 FUNCTION_CONTROL_TYPES = {"switch", "button"}
 DEFAULT_FUNCTION_PULSE_DURATION = 0.35
+DEFAULT_RPM_MIN = 0
+DEFAULT_RPM_MAX = 7
+DEFAULT_RPM_INCREASE_FUNCTION = 5
+DEFAULT_RPM_DECREASE_FUNCTION = 6
 LOCO_BROADCAST = re.compile(
     r"^<l\s+(?P<cab>\d+)\s+\d+\s+(?P<speed>\d+)\s+(?P<functions>\d+)>$"
 )
@@ -52,10 +56,18 @@ class TrainConfig:
     functions: dict[str, int]
     function_controls: dict[int, str]
     function_pulse_durations: dict[int, float]
+    disabled_functions: set[int]
+    rpm_enabled: bool
+    rpm_min: int
+    rpm_max: int
+    rpm_increase_function: int
+    rpm_decrease_function: int
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "TrainConfig":
         """Create config from persisted data."""
+        rpm_min = int(data.get("rpm_min", DEFAULT_RPM_MIN))
+        rpm_max = max(rpm_min + 1, int(data.get("rpm_max", DEFAULT_RPM_MAX)))
         return cls(
             train_id=data["train_id"],
             name=data.get("name") or data["train_id"],
@@ -66,6 +78,18 @@ class TrainConfig:
             ),
             function_pulse_durations=normalize_function_pulse_durations(
                 data.get("function_pulse_durations")
+            ),
+            disabled_functions=normalize_disabled_functions(
+                data.get("disabled_functions")
+            ),
+            rpm_enabled=bool(data.get("rpm_enabled", True)),
+            rpm_min=rpm_min,
+            rpm_max=rpm_max,
+            rpm_increase_function=normalize_function_number(
+                data.get("rpm_increase_function"), DEFAULT_RPM_INCREASE_FUNCTION
+            ),
+            rpm_decrease_function=normalize_function_number(
+                data.get("rpm_decrease_function"), DEFAULT_RPM_DECREASE_FUNCTION
             ),
         )
 
@@ -87,6 +111,21 @@ class TrainConfig:
         """Return switch or button for a function."""
         return self.function_controls.get(function_number, DEFAULT_FUNCTION_CONTROL)
 
+    def function_enabled(self, function_number: int) -> bool:
+        """Return whether a function should create Home Assistant entities."""
+        return function_number not in self.disabled_functions
+
+    def function_label(self, function_number: int) -> str:
+        """Return the preferred Home Assistant label for a function."""
+        aliases = [
+            name.replace("_", " ").title()
+            for name, number in self.functions.items()
+            if number == function_number
+        ]
+        if aliases:
+            return f"F{function_number} {aliases[0]}"
+        return f"F{function_number}"
+
     def function_pulse_duration(self, function_number: int) -> float:
         """Return pulse duration for a function button."""
         return self.function_pulse_durations.get(
@@ -96,10 +135,9 @@ class TrainConfig:
 
 def normalize_function_map(functions: Any) -> dict[str, int]:
     """Normalize train function mappings."""
-    normalized = dict(DEFAULT_FUNCTION_MAP)
-    if not isinstance(functions, dict):
-        return normalized
-    for name, number in functions.items():
+    normalized: dict[str, int] = {}
+    provided = functions if isinstance(functions, dict) else {}
+    for name, number in provided.items():
         key = str(name).strip().lower().replace(" ", "_").replace("-", "_")
         value = str(number).strip().upper().removeprefix("F")
         if not key or not value.isdigit():
@@ -107,7 +145,29 @@ def normalize_function_map(functions: Any) -> dict[str, int]:
         function_number = int(value)
         if 0 <= function_number <= 28:
             normalized[key] = function_number
+    for name, number in DEFAULT_FUNCTION_MAP.items():
+        normalized.setdefault(name, number)
     return normalized
+
+
+def normalize_function_number(value: Any, default: int) -> int:
+    """Normalize one F0-F28 function number."""
+    number = str(value).strip().upper().removeprefix("F")
+    if number.isdigit() and 0 <= int(number) <= 28:
+        return int(number)
+    return default
+
+
+def normalize_disabled_functions(functions: Any) -> set[int]:
+    """Normalize disabled F-key numbers."""
+    if not isinstance(functions, list | tuple | set):
+        return set()
+    disabled: set[int] = set()
+    for function in functions:
+        value = str(function).strip().upper().removeprefix("F")
+        if value.isdigit() and 0 <= int(value) <= 28:
+            disabled.add(int(value))
+    return disabled
 
 
 def normalize_function_controls(function_controls: Any) -> dict[int, str]:
@@ -194,6 +254,8 @@ class DccExClient:
         self._known_speed: dict[int, int] = {}
         self._known_forward: dict[int, bool] = {}
         self._known_functions: dict[int, dict[int, bool]] = {}
+        self._configured_trains: dict[int, TrainConfig] = {}
+        self._sound_levels: dict[int, int] = {}
         self._accessory_states: dict[str, bool] = {}
         self._acquired_trains: set[int] = set()
         self._power_on = False
@@ -261,6 +323,7 @@ class DccExClient:
 
     async def async_start_polling(self, trains: list[TrainConfig]) -> None:
         """Start polling command station and configured trains."""
+        self._configured_trains = {train.address: train for train in trains}
         if self._heartbeat_task and not self._heartbeat_task.done():
             return
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop(trains))
@@ -296,6 +359,7 @@ class DccExClient:
     async def async_set_power(self, on: bool, track: str = "MAIN") -> None:
         """Set DCC-EX track power."""
         self._power_on = on
+        self._mark_power_state(on)
         await self.async_send_raw(f"<{1 if on else 0} {track}>")
 
     def get_power_state(self) -> bool:
@@ -322,6 +386,10 @@ class DccExClient:
         """Return whether RailOps has marked a train active."""
         return train.address in self._acquired_trains
 
+    def get_sound_level(self, train: TrainConfig) -> int:
+        """Return the current sound RPM notch."""
+        return self._sound_levels.get(train.address, -1)
+
     async def async_query_train(self, train: TrainConfig) -> None:
         """Query current locomotive state."""
         await self.async_send_raw(f"<t {train.address}>")
@@ -329,12 +397,47 @@ class DccExClient:
     async def async_acquire_train(self, train: TrainConfig) -> None:
         """Acquire a train for active control in RailOps."""
         self._acquired_trains.add(train.address)
+        self._sound_levels[train.address] = max(
+            self._sound_levels.get(train.address, train.rpm_min), train.rpm_min
+        )
+        self._notify_train(train.address)
         await self.async_query_train(train)
 
     async def async_release_train(self, train: TrainConfig) -> None:
         """Release a train from active RailOps control."""
         self._acquired_trains.discard(train.address)
+        self._sound_levels[train.address] = -1
+        self._notify_train(train.address)
         await self.async_send_raw(f"<- {train.address}>")
+
+    async def async_set_sound_level(self, train: TrainConfig, level: int) -> None:
+        """Move the sound RPM notch with the configured increase/decrease functions."""
+        target = max(-1, min(train.rpm_max, int(level)))
+        current = self._sound_levels.get(train.address, -1)
+        if target == -1:
+            await self.async_release_train(train)
+            return
+        if current == -1:
+            self._acquired_trains.add(train.address)
+            await self.async_query_train(train)
+            current = train.rpm_min
+        current = max(train.rpm_min, min(train.rpm_max, current))
+        if target > current:
+            for _ in range(target - current):
+                await self.async_pulse_function(
+                    train,
+                    train.rpm_increase_function,
+                    train.function_pulse_duration(train.rpm_increase_function),
+                )
+        elif target < current:
+            for _ in range(current - target):
+                await self.async_pulse_function(
+                    train,
+                    train.rpm_decrease_function,
+                    train.function_pulse_duration(train.rpm_decrease_function),
+                )
+        self._sound_levels[train.address] = target
+        self._notify_train(train.address)
 
     async def async_set_speed(self, train: TrainConfig, speed: int) -> None:
         """Set throttle speed from 0 to 126."""
@@ -356,6 +459,10 @@ class DccExClient:
         await self.async_send_raw(
             f"<F {train.address} {function_number} {1 if enabled else 0}>"
         )
+        if enabled and function_number == train.rpm_increase_function:
+            self._adjust_sound_level(train, 1)
+        elif enabled and function_number == train.rpm_decrease_function:
+            self._adjust_sound_level(train, -1)
 
     async def async_set_accessory(
         self, accessory: AccessoryConfig, enabled: bool
@@ -442,7 +549,8 @@ class DccExClient:
             try:
                 await self.async_send_raw("<s>")
                 for train in trains:
-                    await self.async_query_train(train)
+                    if train.address in self._acquired_trains:
+                        await self.async_query_train(train)
             except (DccExConnectionError, DccExCommandError, OSError) as err:
                 _LOGGER.debug("DCC-EX heartbeat failed: %s", err)
                 self._set_connected(False)
@@ -473,6 +581,7 @@ class DccExClient:
         if not match:
             if message.startswith("<p"):
                 self._power_on = "0" not in message[:4]
+                self._mark_power_state(self._power_on)
             elif message.startswith("<-"):
                 _LOGGER.debug("DCC-EX released locomotive: %s", message)
                 return
@@ -494,6 +603,48 @@ class DccExClient:
             "speed": speed,
             "forward": forward,
             "functions": functions,
+            "acquired": address in self._acquired_trains,
+            "sound_level": self._sound_levels.get(address, -1),
+        }
+        for callback in list(self._train_callbacks.get(address, ())):
+            callback(data)
+
+    def _adjust_sound_level(self, train: TrainConfig, delta: int) -> None:
+        """Adjust tracked sound RPM after a mapped function press."""
+        if not train.rpm_enabled:
+            return
+        current = self._sound_levels.get(train.address, -1)
+        if current == -1:
+            current = train.rpm_min
+        self._sound_levels[train.address] = max(
+            train.rpm_min, min(train.rpm_max, current + delta)
+        )
+        self._notify_train(train.address)
+
+    def _mark_power_state(self, on: bool) -> None:
+        """Update acquired and RPM state for configured trains after power changes."""
+        if on:
+            for address, train in self._configured_trains.items():
+                self._acquired_trains.add(address)
+                self._sound_levels[address] = max(
+                    self._sound_levels.get(address, train.rpm_min), train.rpm_min
+                )
+                self._notify_train(address)
+            return
+        for address in self._configured_trains:
+            self._acquired_trains.discard(address)
+            self._sound_levels[address] = -1
+            self._notify_train(address)
+
+    def _notify_train(self, address: int) -> None:
+        """Notify train listeners when local state changes."""
+        data = {
+            "address": address,
+            "speed": self._known_speed.get(address, 0),
+            "forward": self._known_forward.get(address, True),
+            "functions": self._known_functions.get(address, {}),
+            "acquired": address in self._acquired_trains,
+            "sound_level": self._sound_levels.get(address, -1),
         }
         for callback in list(self._train_callbacks.get(address, ())):
             callback(data)

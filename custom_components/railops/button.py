@@ -35,7 +35,8 @@ async def async_setup_entry(
         entities.extend(
             RailOpsFunctionButton(entry, client, train, function_number)
             for function_number in range(29)
-            if train.function_control_type(function_number) == "button"
+            if train.function_enabled(function_number)
+            and train.function_control_type(function_number) == "button"
         )
     async_add_entities(entities)
 
@@ -146,7 +147,7 @@ class RailOpsFunctionButton(RailOpsTrainEntity, ButtonEntity):
         self._attr_unique_id = (
             f"train_{entry.entry_id}_{train.train_id}_function_{function_number}_button"
         )
-        self._attr_name = _function_name(train, function_number)
+        self._attr_name = train.function_label(function_number)
 
     async def async_press(self) -> None:
         """Pulse the function."""
@@ -155,15 +156,3 @@ class RailOpsFunctionButton(RailOpsTrainEntity, ButtonEntity):
             self._function_number,
             self._train.function_pulse_duration(self._function_number),
         )
-
-
-def _function_name(train: TrainConfig, function_number: int) -> str:
-    """Return a display name for a function."""
-    aliases = [
-        name.replace("_", " ").title()
-        for name, number in train.functions.items()
-        if number == function_number
-    ]
-    if aliases:
-        return f"F{function_number} {aliases[0]}"
-    return f"F{function_number}"

@@ -13,6 +13,7 @@ CONF_PORT: Final = "port"
 DEFAULT_PORT: Final = 2560
 
 PLATFORMS: Final = [
+    Platform.BINARY_SENSOR,
     Platform.BUTTON,
     Platform.NUMBER,
     Platform.SELECT,
@@ -35,10 +36,16 @@ ATTR_FORWARD: Final = "forward"
 ATTR_FUNCTION: Final = "function"
 ATTR_FUNCTIONS: Final = "functions"
 ATTR_FUNCTION_CONTROLS: Final = "function_controls"
+ATTR_DISABLED_FUNCTIONS: Final = "disabled_functions"
 ATTR_FUNCTION_NAME: Final = "function_name"
 ATTR_FUNCTION_NUMBER: Final = "function_number"
 ATTR_CONTROL_TYPE: Final = "control_type"
 ATTR_PULSE_DURATION: Final = "pulse_duration"
+ATTR_RPM_ENABLED: Final = "rpm_enabled"
+ATTR_RPM_MIN: Final = "rpm_min"
+ATTR_RPM_MAX: Final = "rpm_max"
+ATTR_RPM_INCREASE_FUNCTION: Final = "rpm_increase_function"
+ATTR_RPM_DECREASE_FUNCTION: Final = "rpm_decrease_function"
 ATTR_ENABLED: Final = "enabled"
 ATTR_TRACK: Final = "track"
 ATTR_DURATION: Final = "duration"

@@ -24,10 +24,16 @@ from .const import (
     ATTR_ENTRY_ID,
     ATTR_FORWARD,
     ATTR_FUNCTION,
+    ATTR_DISABLED_FUNCTIONS,
     ATTR_FUNCTION_NAME,
     ATTR_FUNCTION_NUMBER,
     ATTR_FUNCTIONS,
     ATTR_NAME,
+    ATTR_RPM_DECREASE_FUNCTION,
+    ATTR_RPM_ENABLED,
+    ATTR_RPM_INCREASE_FUNCTION,
+    ATTR_RPM_MAX,
+    ATTR_RPM_MIN,
     ATTR_SPEED,
     ATTR_TRACK,
     ATTR_TRAIN_ID,
@@ -54,6 +60,16 @@ TRAIN_SCHEMA = {
     vol.Optional(ATTR_NAME): cv.string,
     vol.Required(ATTR_ADDRESS): vol.All(vol.Coerce(int), vol.Range(min=1, max=10239)),
     vol.Optional(ATTR_FUNCTIONS): dict,
+    vol.Optional(ATTR_DISABLED_FUNCTIONS): list,
+    vol.Optional(ATTR_RPM_ENABLED): cv.boolean,
+    vol.Optional(ATTR_RPM_MIN): vol.All(vol.Coerce(int), vol.Range(min=0, max=20)),
+    vol.Optional(ATTR_RPM_MAX): vol.All(vol.Coerce(int), vol.Range(min=1, max=20)),
+    vol.Optional(ATTR_RPM_INCREASE_FUNCTION): vol.All(
+        vol.Coerce(int), vol.Range(min=0, max=28)
+    ),
+    vol.Optional(ATTR_RPM_DECREASE_FUNCTION): vol.All(
+        vol.Coerce(int), vol.Range(min=0, max=28)
+    ),
 }
 
 
@@ -111,14 +127,21 @@ def _async_remove_legacy_train_entities(
             button_unique_id = (
                 f"train_{entry.entry_id}_{train_id}_function_{function_number}_button"
             )
-            if train_config.function_control_type(function_number) == "button":
-                entity_id = registry.async_get_entity_id(
-                    "switch", DOMAIN, switch_unique_id
-                )
-            else:
-                entity_id = registry.async_get_entity_id(
-                    "button", DOMAIN, button_unique_id
-                )
+            if not train_config.function_enabled(function_number):
+                for platform, unique_id in (
+                    ("switch", switch_unique_id),
+                    ("button", button_unique_id),
+                ):
+                    entity_id = registry.async_get_entity_id(platform, DOMAIN, unique_id)
+                    if entity_id:
+                        registry.async_remove(entity_id)
+                continue
+            platform, unique_id = (
+                ("switch", switch_unique_id)
+                if train_config.function_control_type(function_number) == "button"
+                else ("button", button_unique_id)
+            )
+            entity_id = registry.async_get_entity_id(platform, DOMAIN, unique_id)
             if entity_id:
                 registry.async_remove(entity_id)
 
@@ -182,7 +205,13 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         entry, train_id, trains = _entry_train_and_trains_from_entity(hass, call)
         functions = dict(trains[train_id].get(ATTR_FUNCTIONS, {}))
         name = _normalize_function_name(call.data[ATTR_FUNCTION_NAME])
-        functions[name] = call.data[ATTR_FUNCTION_NUMBER]
+        function_number = int(call.data[ATTR_FUNCTION_NUMBER])
+        functions = {
+            function_name: number
+            for function_name, number in functions.items()
+            if _function_number_value(number) != function_number
+        }
+        functions[name] = function_number
         trains[train_id][ATTR_FUNCTIONS] = functions
         await _save_trains(hass, entry, trains)
 
@@ -366,15 +395,36 @@ def _normalize_train(data: dict[str, Any]) -> dict[str, Any]:
         ATTR_TRAIN_ID: data[ATTR_TRAIN_ID],
         ATTR_NAME: data.get(ATTR_NAME) or data[ATTR_TRAIN_ID],
         ATTR_ADDRESS: data[ATTR_ADDRESS],
+        ATTR_RPM_ENABLED: data.get(ATTR_RPM_ENABLED, True),
+        ATTR_RPM_MIN: data.get(ATTR_RPM_MIN, 0),
+        ATTR_RPM_MAX: max(
+            int(data.get(ATTR_RPM_MIN, 0)) + 1, int(data.get(ATTR_RPM_MAX, 7))
+        ),
+        ATTR_RPM_INCREASE_FUNCTION: data.get(ATTR_RPM_INCREASE_FUNCTION, 5),
+        ATTR_RPM_DECREASE_FUNCTION: data.get(ATTR_RPM_DECREASE_FUNCTION, 6),
     }
     if ATTR_FUNCTIONS in data:
         train[ATTR_FUNCTIONS] = _normalize_function_map(data[ATTR_FUNCTIONS])
+    if ATTR_DISABLED_FUNCTIONS in data:
+        train[ATTR_DISABLED_FUNCTIONS] = [
+            int(function)
+            for function in data[ATTR_DISABLED_FUNCTIONS]
+            if str(function).isdigit() and 0 <= int(function) <= 28
+        ]
     return train
 
 
 def _normalize_function_name(name: str) -> str:
     """Normalize a friendly function name."""
     return name.strip().lower().replace(" ", "_").replace("-", "_")
+
+
+def _function_number_value(value: Any) -> int | None:
+    """Return a function number from stored data."""
+    number = str(value).strip().upper().removeprefix("F")
+    if number.isdigit() and 0 <= int(number) <= 28:
+        return int(number)
+    return None
 
 
 def _normalize_function_map(functions: dict[str, Any]) -> dict[str, int]:

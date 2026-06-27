@@ -26,12 +26,24 @@
           "action": "Action"
         }
       },
+      "edit_controller": {
+        "title": "Edit controller connection",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
+      },
       "add_train": {
         "title": "Add locomotive",
         "data": {
           "train_id": "Locomotive ID",
           "name": "Name",
-          "address": "DCC address"
+          "address": "DCC address",
+          "rpm_enabled": "RPM indicator",
+          "rpm_min": "RPM idle notch",
+          "rpm_max": "RPM max notch",
+          "rpm_increase_function": "RPM increase function",
+          "rpm_decrease_function": "RPM decrease function"
         }
       },
       "edit_train": {
@@ -44,7 +56,12 @@
         "title": "Edit locomotive",
         "data": {
           "name": "Name",
-          "address": "DCC address"
+          "address": "DCC address",
+          "rpm_enabled": "RPM indicator",
+          "rpm_min": "RPM idle notch",
+          "rpm_max": "RPM max notch",
+          "rpm_increase_function": "RPM increase function",
+          "rpm_decrease_function": "RPM decrease function"
         }
       },
       "remove_train": {
@@ -95,7 +112,8 @@
           "function_name": "Friendly name",
           "function_number": "Function number",
           "control_type": "Control type",
-          "pulse_duration": "Button pulse duration"
+          "pulse_duration": "Button pulse duration",
+          "enabled": "Create Home Assistant entity"
         }
       },
       "set_function_control": {
@@ -104,7 +122,16 @@
           "train_id": "Locomotive",
           "function_number": "Function number",
           "control_type": "Control type",
-          "pulse_duration": "Button pulse duration"
+          "pulse_duration": "Button pulse duration",
+          "enabled": "Create Home Assistant entity"
+        }
+      },
+      "set_function_enabled": {
+        "title": "Enable or disable function",
+        "data": {
+          "train_id": "Locomotive",
+          "function_number": "Function number",
+          "enabled": "Create Home Assistant entity"
         }
       },
       "remove_function_mapping": {
@@ -118,6 +145,7 @@
     "selector": {
       "action": {
         "options": {
+          "edit_controller": "Edit controller connection",
           "add_train": "Add locomotive",
           "add_accessory": "Add accessory",
           "edit_train": "Edit locomotive",
@@ -126,6 +154,7 @@
           "remove_accessory": "Remove accessory",
           "set_function_mapping": "Set function mapping",
           "set_function_control": "Set function control type",
+          "set_function_enabled": "Enable or disable function",
           "remove_function_mapping": "Remove function mapping"
         }
       }

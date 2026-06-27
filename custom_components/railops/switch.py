@@ -27,7 +27,8 @@ async def async_setup_entry(
         entities.extend(
             RailOpsFunctionSwitch(entry, client, train, function_number)
             for function_number in range(29)
-            if train.function_control_type(function_number) == "switch"
+            if train.function_enabled(function_number)
+            and train.function_control_type(function_number) == "switch"
         )
     entities.extend(
         RailOpsAccessorySwitch(entry, client, AccessoryConfig.from_dict(accessory))
@@ -81,7 +82,7 @@ class RailOpsFunctionSwitch(RailOpsTrainEntity, SwitchEntity):
         self._attr_unique_id = (
             f"train_{entry.entry_id}_{train.train_id}_function_{function_number}"
         )
-        self._attr_name = self._function_name()
+        self._attr_name = train.function_label(function_number)
         self._unsub: Callable[[], None] | None = None
 
     @property
@@ -90,17 +91,6 @@ class RailOpsFunctionSwitch(RailOpsTrainEntity, SwitchEntity):
         return self._client.get_function_state(
             self._train.address, self._function_number
         )
-
-    def _function_name(self) -> str:
-        """Return a display name for the function."""
-        aliases = [
-            name.replace("_", " ").title()
-            for name, number in self._train.functions.items()
-            if number == self._function_number
-        ]
-        if aliases:
-            return f"F{self._function_number} {aliases[0]}"
-        return f"F{self._function_number}"
 
     async def async_turn_on(self, **kwargs) -> None:
         """Turn the function on."""

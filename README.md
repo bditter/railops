@@ -6,7 +6,7 @@ Custom Home Assistant integration for controlling model trains directly through 
 
 ## Version
 
-`1.5.1`
+`1.6.0`
 
 ## What it creates
 
@@ -14,9 +14,11 @@ Custom Home Assistant integration for controlling model trains directly through 
 - Controller controls for track power and global emergency stop.
 - One train device per configured locomotive.
 - Train controls for speed, direction, stop, emergency stop, and mapped DCC functions.
+- Train acquired state and RPM/notch indicator for sound decoders.
 - Standard F0-F28 function switches for each locomotive, labeled with friendly mappings when available.
-- Function controls can be configured as toggles or momentary buttons.
+- Function controls can be configured as toggles, momentary buttons, or hidden from Home Assistant.
 - Locomotive acquire and release buttons for marking active RailOps control.
+- Controller host and port can be changed from Configure.
 - Accessory setup for DCC accessory decoder outputs and function-decoder outputs.
 - Controller and locomotive polling using DCC-EX status and throttle queries.
 - Services to add, edit, remove, stop, emergency stop, power, and control trains.

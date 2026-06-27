@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.6.0
+
+- Marks configured locomotives acquired when track power is turned on and released when track power is turned off.
+- Adds train Acquired binary sensors.
+- Adds a train RPM number for sound-decoder notches, defaulting to F5 increase, F6 decrease, idle 0, max 7, and released -1.
+- Lets locomotive setup edit RPM behavior and controller host/port.
+- Lets F0-F28 function entities be disabled from Configure.
+- Gives custom function mappings priority over built-in labels and replaces old custom labels for the same F-key.
+- Polls only acquired locomotives so release is not undone by the heartbeat query.
+
 ## 1.5.1
 
 - Sends DCC-EX's native `<- cab>` locomotive release command from release buttons.

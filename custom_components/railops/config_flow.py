@@ -19,6 +19,7 @@ from .const import (
     ATTR_ACCESSORY_ID,
     ATTR_ADDRESS,
     ATTR_CONTROL_TYPE,
+    ATTR_DISABLED_FUNCTIONS,
     ATTR_FUNCTION_NAME,
     ATTR_FUNCTION_NUMBER,
     ATTR_FUNCTION_CONTROLS,
@@ -28,6 +29,11 @@ from .const import (
     ATTR_NAME,
     ATTR_OUTPUT,
     ATTR_PULSE_DURATION,
+    ATTR_RPM_DECREASE_FUNCTION,
+    ATTR_RPM_ENABLED,
+    ATTR_RPM_INCREASE_FUNCTION,
+    ATTR_RPM_MAX,
+    ATTR_RPM_MIN,
     ATTR_SUBADDRESS,
     ATTR_TRAIN_ID,
     DEFAULT_PORT,
@@ -101,6 +107,7 @@ class RailOpsOptionsFlow(config_entries.OptionsFlow):
     ) -> config_entries.ConfigFlowResult:
         """Show the RailOps management form."""
         actions = {
+            "edit_controller": "Edit controller connection",
             "add_train": "Add locomotive",
             "add_accessory": "Add accessory",
         }
@@ -111,6 +118,7 @@ class RailOpsOptionsFlow(config_entries.OptionsFlow):
                     "remove_train": "Remove locomotive",
                     "set_function_mapping": "Set function mapping",
                     "set_function_control": "Set function control type",
+                    "set_function_enabled": "Enable or disable function",
                     "remove_function_mapping": "Remove function mapping",
                 }
             )
@@ -126,6 +134,43 @@ class RailOpsOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({vol.Required("action"): vol.In(actions)}),
+        )
+
+    async def async_step_edit_controller(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Edit the DCC-EX controller connection."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            user_input = {**user_input, CONF_PORT: int(user_input[CONF_PORT])}
+            client = DccExClient(user_input[CONF_HOST], user_input[CONF_PORT])
+            try:
+                await client.async_test_connection()
+            except DccExConnectionError:
+                errors["base"] = "cannot_connect"
+            else:
+                self.hass.config_entries.async_update_entry(
+                    self._config_entry,
+                    title=f"RailOps {user_input[CONF_HOST]}:{user_input[CONF_PORT]}",
+                    data={**self._config_entry.data, **user_input},
+                )
+                return self.async_create_entry(
+                    title="", data=dict(self._config_entry.options)
+                )
+        return self.async_show_form(
+            step_id="edit_controller",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_HOST, default=self._config_entry.data.get(CONF_HOST, "")
+                    ): str,
+                    vol.Required(
+                        CONF_PORT,
+                        default=self._config_entry.data.get(CONF_PORT, DEFAULT_PORT),
+                    ): _whole_number_selector(1, 65535),
+                }
+            ),
+            errors=errors,
         )
 
     async def async_step_add_train(
@@ -269,7 +314,13 @@ class RailOpsOptionsFlow(config_entries.OptionsFlow):
             train = trains[user_input[ATTR_TRAIN_ID]]
             functions = dict(train.get(ATTR_FUNCTIONS, {}))
             name = _normalize_function_name(user_input[ATTR_FUNCTION_NAME])
-            functions[name] = user_input[ATTR_FUNCTION_NUMBER]
+            function_number = int(user_input[ATTR_FUNCTION_NUMBER])
+            functions = {
+                function_name: number
+                for function_name, number in functions.items()
+                if _function_number_value(number) != function_number
+            }
+            functions[name] = function_number
             train[ATTR_FUNCTIONS] = functions
             _set_function_control_data(train, user_input)
             return self._create_entry(trains, self._accessories_by_id)
@@ -291,6 +342,7 @@ class RailOpsOptionsFlow(config_entries.OptionsFlow):
                     vol.Optional(ATTR_PULSE_DURATION, default=0.35): vol.All(
                         vol.Coerce(float), vol.Range(min=0.05, max=10)
                     ),
+                    vol.Optional("enabled", default=True): bool,
                 }
             ),
         )
@@ -321,6 +373,33 @@ class RailOpsOptionsFlow(config_entries.OptionsFlow):
                     vol.Optional(ATTR_PULSE_DURATION, default=0.35): vol.All(
                         vol.Coerce(float), vol.Range(min=0.05, max=10)
                     ),
+                    vol.Optional("enabled", default=True): bool,
+                }
+            ),
+        )
+
+    async def async_step_set_function_enabled(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Enable or disable a function entity."""
+        if user_input is not None:
+            trains = self._trains_by_id
+            train = trains[user_input[ATTR_TRAIN_ID]]
+            disabled = set(train.get(ATTR_DISABLED_FUNCTIONS, []))
+            function_number = int(user_input[ATTR_FUNCTION_NUMBER])
+            if user_input["enabled"]:
+                disabled.discard(function_number)
+            else:
+                disabled.add(function_number)
+            train[ATTR_DISABLED_FUNCTIONS] = sorted(disabled)
+            return self._create_entry(trains, self._accessories_by_id)
+        return self.async_show_form(
+            step_id="set_function_enabled",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(ATTR_TRAIN_ID): vol.In(self._train_names),
+                    vol.Required(ATTR_FUNCTION_NUMBER): _whole_number_selector(0, 28),
+                    vol.Required("enabled", default=True): bool,
                 }
             ),
         )
@@ -403,6 +482,27 @@ def _train_schema(train: dict[str, Any] | None = None) -> vol.Schema:
     schema[vol.Required(ATTR_ADDRESS, default=train.get(ATTR_ADDRESS, 3))] = (
         _whole_number_selector(1, 10239)
     )
+    schema[vol.Optional(ATTR_RPM_ENABLED, default=train.get(ATTR_RPM_ENABLED, True))] = (
+        bool
+    )
+    schema[vol.Optional(ATTR_RPM_MIN, default=train.get(ATTR_RPM_MIN, 0))] = (
+        _whole_number_selector(0, 20)
+    )
+    schema[vol.Optional(ATTR_RPM_MAX, default=train.get(ATTR_RPM_MAX, 7))] = (
+        _whole_number_selector(1, 20)
+    )
+    schema[
+        vol.Optional(
+            ATTR_RPM_INCREASE_FUNCTION,
+            default=train.get(ATTR_RPM_INCREASE_FUNCTION, 5),
+        )
+    ] = _whole_number_selector(0, 28)
+    schema[
+        vol.Optional(
+            ATTR_RPM_DECREASE_FUNCTION,
+            default=train.get(ATTR_RPM_DECREASE_FUNCTION, 6),
+        )
+    ] = _whole_number_selector(0, 28)
     return vol.Schema(schema)
 
 
@@ -412,6 +512,13 @@ def _normalize_train(data: dict[str, Any]) -> dict[str, Any]:
         ATTR_TRAIN_ID: data[ATTR_TRAIN_ID],
         ATTR_NAME: data.get(ATTR_NAME) or data[ATTR_TRAIN_ID],
         ATTR_ADDRESS: int(data[ATTR_ADDRESS]),
+        ATTR_RPM_ENABLED: bool(data.get(ATTR_RPM_ENABLED, True)),
+        ATTR_RPM_MIN: int(data.get(ATTR_RPM_MIN, 0)),
+        ATTR_RPM_MAX: max(
+            int(data.get(ATTR_RPM_MIN, 0)) + 1, int(data.get(ATTR_RPM_MAX, 7))
+        ),
+        ATTR_RPM_INCREASE_FUNCTION: int(data.get(ATTR_RPM_INCREASE_FUNCTION, 5)),
+        ATTR_RPM_DECREASE_FUNCTION: int(data.get(ATTR_RPM_DECREASE_FUNCTION, 6)),
     }
     if ATTR_FUNCTIONS in data:
         train[ATTR_FUNCTIONS] = data[ATTR_FUNCTIONS]
@@ -419,6 +526,8 @@ def _normalize_train(data: dict[str, Any]) -> dict[str, Any]:
         train[ATTR_FUNCTION_CONTROLS] = data[ATTR_FUNCTION_CONTROLS]
     if "function_pulse_durations" in data:
         train["function_pulse_durations"] = data["function_pulse_durations"]
+    if ATTR_DISABLED_FUNCTIONS in data:
+        train[ATTR_DISABLED_FUNCTIONS] = list(data[ATTR_DISABLED_FUNCTIONS])
     return train
 
 
@@ -433,6 +542,14 @@ def _set_function_control_data(train: dict[str, Any], data: dict[str, Any]) -> N
         durations = dict(train.get("function_pulse_durations", {}))
         durations[str(function_number)] = float(data.get(ATTR_PULSE_DURATION, 0.35))
         train["function_pulse_durations"] = durations
+
+    if "enabled" in data:
+        disabled = set(train.get(ATTR_DISABLED_FUNCTIONS, []))
+        if data["enabled"]:
+            disabled.discard(function_number)
+        else:
+            disabled.add(function_number)
+        train[ATTR_DISABLED_FUNCTIONS] = sorted(disabled)
 
 
 def _accessory_schema(accessory: dict[str, Any] | None = None) -> vol.Schema:
@@ -493,3 +610,11 @@ def _whole_number_selector(min_value: int, max_value: int) -> selector.NumberSel
 def _normalize_function_name(name: str) -> str:
     """Normalize a friendly function name."""
     return name.strip().lower().replace(" ", "_").replace("-", "_")
+
+
+def _function_number_value(value: Any) -> int | None:
+    """Return a function number from stored data."""
+    number = str(value).strip().upper().removeprefix("F")
+    if number.isdigit() and 0 <= int(number) <= 28:
+        return int(number)
+    return None
