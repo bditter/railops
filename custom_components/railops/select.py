@@ -24,10 +24,13 @@ async def async_setup_entry(
 ) -> None:
     """Set up RailOps select entities."""
     client: DccExClient = hass.data[DOMAIN][entry.entry_id][DATA_CLIENT]
-    async_add_entities(
-        RailOpsDirectionSelect(entry, client, TrainConfig.from_dict(train))
-        for train in entry.options.get(OPT_TRAINS, [])
-    )
+    entities: list[SelectEntity] = []
+    for train_data in entry.options.get(OPT_TRAINS, []):
+        train = TrainConfig.from_dict(train_data)
+        entities.append(RailOpsDirectionSelect(entry, client, train))
+        if train.rpm_enabled:
+            entities.append(RailOpsSoundStateSelect(entry, client, train))
+    async_add_entities(entities)
 
 
 class RailOpsDirectionSelect(RailOpsTrainEntity, SelectEntity):
@@ -70,3 +73,72 @@ class RailOpsDirectionSelect(RailOpsTrainEntity, SelectEntity):
     def _train_updated(self, data: dict) -> None:
         """Refresh state after a train broadcast."""
         self.async_write_ha_state()
+
+
+class RailOpsSoundStateSelect(RailOpsTrainEntity, SelectEntity):
+    """Train sound state control."""
+
+    _attr_icon = "mdi:gauge"
+
+    def __init__(
+        self, entry: ConfigEntry, client: DccExClient, train: TrainConfig
+    ) -> None:
+        """Initialize the sound state select."""
+        super().__init__(entry, client, train)
+        self._attr_unique_id = f"train_{entry.entry_id}_{train.train_id}_sound_state"
+        self._attr_name = "Sound State"
+        self._attr_options = _sound_options(train)
+        self._unsub: Callable[[], None] | None = None
+
+    @property
+    def current_option(self) -> str:
+        """Return current sound state."""
+        return _sound_option(self._client.get_sound_level(self._train))
+
+    async def async_select_option(self, option: str) -> None:
+        """Set train sound state."""
+        await self._client.async_set_sound_level(self._train, _sound_level(option))
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to train updates."""
+        self._unsub = self._client.subscribe_train(
+            self._train.address, self._train_updated
+        )
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Unsubscribe from train updates."""
+        if self._unsub:
+            self._unsub()
+
+    @callback
+    def _train_updated(self, data: dict) -> None:
+        """Refresh state after a train broadcast."""
+        self.async_write_ha_state()
+
+
+def _sound_options(train: TrainConfig) -> list[str]:
+    """Return sound-state options for a train."""
+    return [
+        "Shutdown",
+        "Idle",
+        *[f"Speed {level}" for level in range(1, train.rpm_max + 1)],
+    ]
+
+
+def _sound_option(level: int) -> str:
+    """Return the display option for a sound level."""
+    if level < 0:
+        return "Shutdown"
+    if level == 0:
+        return "Idle"
+    return f"Speed {level}"
+
+
+def _sound_level(option: str) -> int:
+    """Return the sound level for a display option."""
+    if option == "Shutdown":
+        return -1
+    if option == "Idle":
+        return 0
+    return int(option.removeprefix("Speed "))

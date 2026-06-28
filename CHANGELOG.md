@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.3
+
+- Corrects sound-state tracking so F5 from shutdown starts at idle and F6 from idle moves to shutdown.
+- Adds a Sound State select with Shutdown, Idle, and Speed 1 through Speed 7 style labels.
+- Keeps sound shutdown separate from locomotive release/acquire state.
+
 ## 1.6.2
 
 - Moves controller connection state to a connectivity binary sensor so Home Assistant renders connected/disconnected correctly.

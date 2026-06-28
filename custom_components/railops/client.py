@@ -414,14 +414,10 @@ class DccExClient:
         """Move the sound RPM notch with the configured increase/decrease functions."""
         target = max(-1, min(train.rpm_max, int(level)))
         current = self._sound_levels.get(train.address, -1)
-        if target == -1:
-            await self.async_release_train(train)
-            return
-        if current == -1:
+        if current == -1 and target >= train.rpm_min:
             self._acquired_trains.add(train.address)
             await self.async_query_train(train)
-            current = train.rpm_min
-        current = max(train.rpm_min, min(train.rpm_max, current))
+        current = max(-1, min(train.rpm_max, current))
         if target > current:
             for _ in range(target - current):
                 await self.async_pulse_function(
@@ -614,11 +610,15 @@ class DccExClient:
         if not train.rpm_enabled:
             return
         current = self._sound_levels.get(train.address, -1)
-        if current == -1:
-            current = train.rpm_min
-        self._sound_levels[train.address] = max(
-            train.rpm_min, min(train.rpm_max, current + delta)
-        )
+        if delta > 0 and current == -1:
+            self._acquired_trains.add(train.address)
+            self._sound_levels[train.address] = train.rpm_min
+        elif delta < 0 and current <= train.rpm_min:
+            self._sound_levels[train.address] = -1
+        else:
+            self._sound_levels[train.address] = max(
+                train.rpm_min, min(train.rpm_max, current + delta)
+            )
         self._notify_train(train.address)
 
     def _mark_power_state(self, on: bool) -> None:
