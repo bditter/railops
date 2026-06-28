@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.1
+
+- Reloads RailOps automatically after changing the controller host or port.
+- Adds a Reload integration action to the RailOps Configure menu.
+
 ## 1.6.0
 
 - Marks configured locomotives acquired when track power is turned on and released when track power is turned off.

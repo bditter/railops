@@ -108,6 +108,7 @@ class RailOpsOptionsFlow(config_entries.OptionsFlow):
         """Show the RailOps management form."""
         actions = {
             "edit_controller": "Edit controller connection",
+            "reload_integration": "Reload integration",
             "add_train": "Add locomotive",
             "add_accessory": "Add accessory",
         }
@@ -154,6 +155,7 @@ class RailOpsOptionsFlow(config_entries.OptionsFlow):
                     title=f"RailOps {user_input[CONF_HOST]}:{user_input[CONF_PORT]}",
                     data={**self._config_entry.data, **user_input},
                 )
+                self._async_reload_entry()
                 return self.async_create_entry(
                     title="", data=dict(self._config_entry.options)
                 )
@@ -172,6 +174,13 @@ class RailOpsOptionsFlow(config_entries.OptionsFlow):
             ),
             errors=errors,
         )
+
+    async def async_step_reload_integration(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Reload the RailOps config entry."""
+        self._async_reload_entry()
+        return self.async_create_entry(title="", data=dict(self._config_entry.options))
 
     async def async_step_add_train(
         self, user_input: dict[str, Any] | None = None
@@ -470,6 +479,12 @@ class RailOpsOptionsFlow(config_entries.OptionsFlow):
             OPT_ACCESSORIES: list(accessories.values()),
         }
         return self.async_create_entry(title="", data=options)
+
+    def _async_reload_entry(self) -> None:
+        """Schedule a reload after an options-flow action changes live connection data."""
+        self.hass.async_create_task(
+            self.hass.config_entries.async_reload(self._config_entry.entry_id)
+        )
 
 
 def _train_schema(train: dict[str, Any] | None = None) -> vol.Schema:

@@ -146,6 +146,7 @@
       "action": {
         "options": {
           "edit_controller": "Edit controller connection",
+          "reload_integration": "Reload integration",
           "add_train": "Add locomotive",
           "add_accessory": "Add accessory",
           "edit_train": "Edit locomotive",
