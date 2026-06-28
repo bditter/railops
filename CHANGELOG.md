@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.2
+
+- Moves controller connection state to a connectivity binary sensor so Home Assistant renders connected/disconnected correctly.
+- Removes the old controller text sensor during startup.
+
 ## 1.6.1
 
 - Reloads RailOps automatically after changing the controller host or port.

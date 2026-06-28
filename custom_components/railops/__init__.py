@@ -105,6 +105,11 @@ def _async_remove_legacy_train_entities(
 ) -> None:
     """Remove entities from earlier RailOps train telemetry/function designs."""
     registry = er.async_get(hass)
+    old_controller_entity_id = registry.async_get_entity_id(
+        "sensor", DOMAIN, f"controller_{entry.entry_id}"
+    )
+    if old_controller_entity_id:
+        registry.async_remove(old_controller_entity_id)
     for train in entry.options.get(OPT_TRAINS, []):
         train_id = train[ATTR_TRAIN_ID]
         train_config = TrainConfig.from_dict(train)
