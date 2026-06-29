@@ -6,7 +6,7 @@ Custom Home Assistant integration for controlling model trains directly through 
 
 ## Version
 
-`1.6.5`
+`1.6.6`
 
 ## What it creates
 

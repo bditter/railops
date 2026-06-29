@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.6
+
+- Queries DCC-EX current with `<c>` on connect and heartbeat.
+- Uses non-zero current reports to resolve unknown Track Power state after a fresh Home Assistant restart.
+
 ## 1.6.5
 
 - Restores Track Power state after Home Assistant reloads RailOps instead of defaulting to off.

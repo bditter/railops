@@ -40,6 +40,7 @@ LOCO_BROADCAST = re.compile(
 POWER_BROADCAST = re.compile(
     r"^<p\s*(?P<state>1|0|on|off)\b.*>$", re.IGNORECASE
 )
+CURRENT_REPORT = re.compile(r"^<c\s+.+?\s+(?P<current>\d+)\s+C\s+.*>$")
 
 
 class DccExConnectionError(Exception):
@@ -384,6 +385,7 @@ class DccExClient:
         """Open the TCP connection."""
         await self._ensure_connected()
         await self.async_send_raw("<s>")
+        await self.async_send_raw("<c>")
 
     async def async_set_power(self, on: bool, track: str = "MAIN") -> None:
         """Set DCC-EX track power."""
@@ -584,6 +586,7 @@ class DccExClient:
         while True:
             try:
                 await self.async_send_raw("<s>")
+                await self.async_send_raw("<c>")
                 for train in trains:
                     if train.address in self._acquired_trains:
                         await self.async_query_train(train)
@@ -619,6 +622,9 @@ class DccExClient:
             if power_match:
                 state = power_match.group("state").lower()
                 self._set_power_state(state in {"1", "on"})
+            elif current_match := CURRENT_REPORT.match(message):
+                if self._power_on is None:
+                    self._set_power_state(int(current_match.group("current")) > 0)
             elif message.startswith("<-"):
                 _LOGGER.debug("DCC-EX released locomotive: %s", message)
                 return
