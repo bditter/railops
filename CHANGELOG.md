@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.7
+
+- Updates existing F-key entity names in the Home Assistant entity registry when function mappings change.
+- Adds a more complete Configure F keys flow so a locomotive is selected once, then each F key can be edited with name, control type, pulse duration, and enabled/disabled state.
+
 ## 1.6.6
 
 - Queries DCC-EX current with `<c>` on connect and heartbeat.

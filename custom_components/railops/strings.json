@@ -107,15 +107,36 @@
           "accessory_id": "Accessory"
         }
       },
+      "configure_functions": {
+        "title": "Configure F keys",
+        "data": {
+          "train_id": "Locomotive"
+        }
+      },
+      "configure_function": {
+        "title": "Choose F key",
+        "data": {
+          "function_number": "F key"
+        }
+      },
+      "configure_function_details": {
+        "title": "Configure F key",
+        "data": {
+          "function_name": "Friendly name",
+          "control_type": "Control type",
+          "pulse_duration": "Button pulse duration",
+          "enabled": "Enabled in Home Assistant"
+        }
+      },
       "set_function_mapping": {
-        "title": "Set function mapping",
+        "title": "Configure F key",
         "data": {
           "train_id": "Locomotive",
           "function_name": "Friendly name",
           "function_number": "Function number",
           "control_type": "Control type",
           "pulse_duration": "Button pulse duration",
-          "enabled": "Create Home Assistant entity"
+          "enabled": "Enabled in Home Assistant"
         }
       },
       "set_function_control": {
@@ -155,7 +176,7 @@
           "remove_train": "Remove locomotive",
           "edit_accessory": "Edit accessory",
           "remove_accessory": "Remove accessory",
-          "set_function_mapping": "Set function mapping",
+          "configure_functions": "Configure F keys",
           "set_function_control": "Set function control type",
           "set_function_enabled": "Enable or disable function",
           "remove_function_mapping": "Remove function mapping"

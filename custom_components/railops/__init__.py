@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import voluptuous as vol
@@ -55,6 +56,8 @@ from .const import (
     SERVICE_STOP,
     SERVICE_UPDATE_TRAIN,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 TRAIN_SCHEMA = {
     vol.Required(ATTR_TRAIN_ID): cv.string,
@@ -153,6 +156,18 @@ def _async_remove_legacy_train_entities(
             entity_id = registry.async_get_entity_id(platform, DOMAIN, unique_id)
             if entity_id:
                 registry.async_remove(entity_id)
+            active_platform, active_unique_id = (
+                ("button", button_unique_id)
+                if train_config.function_control_type(function_number) == "button"
+                else ("switch", switch_unique_id)
+            )
+            entity_id = registry.async_get_entity_id(
+                active_platform, DOMAIN, active_unique_id
+            )
+            if entity_id:
+                _async_update_entity_name(
+                    registry, entity_id, train_config.function_label(function_number)
+                )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -175,6 +190,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.services.async_remove(DOMAIN, SERVICE_STOP)
             hass.services.async_remove(DOMAIN, SERVICE_ESTOP)
     return unload_ok
+
+
+def _async_update_entity_name(
+    registry: er.EntityRegistry, entity_id: str, name: str
+) -> None:
+    """Update an existing entity registry name while preserving the entity id."""
+    try:
+        registry.async_update_entity(entity_id, name=name)
+    except TypeError:
+        _LOGGER.debug("Unable to update entity registry name for %s", entity_id)
 
 
 async def _async_register_services(hass: HomeAssistant) -> None:
