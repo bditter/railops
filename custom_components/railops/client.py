@@ -34,6 +34,10 @@ DEFAULT_RPM_MAX = 7
 DEFAULT_RPM_INCREASE_FUNCTION = 5
 DEFAULT_RPM_DECREASE_FUNCTION = 6
 DEFAULT_RPM_STEP_DELAY = 1.0
+TRACK_ALL = "ALL"
+TRACK_MAIN = "MAIN"
+TRACK_PROG = "PROG"
+TRACKS = {TRACK_MAIN, TRACK_PROG, TRACK_ALL}
 LOCO_BROADCAST = re.compile(
     r"^<l\s+(?P<cab>\d+)\s+\d+\s+(?P<speed>\d+)\s+(?P<functions>\d+)>$"
 )
@@ -188,6 +192,20 @@ def normalize_delay(value: Any, default: float) -> float:
     return max(0.0, min(10.0, delay))
 
 
+def normalize_track(track: str | None) -> str:
+    """Normalize a DCC-EX track name."""
+    if track is None:
+        return TRACK_ALL
+    value = str(track).strip().upper()
+    if value in {"", TRACK_ALL, "BOTH"}:
+        return TRACK_ALL
+    if value in {"PROGRAMMING", "PROGRAM"}:
+        return TRACK_PROG
+    if value in TRACKS:
+        return value
+    return TRACK_MAIN
+
+
 def normalize_function_controls(function_controls: Any) -> dict[int, str]:
     """Normalize function control type mappings."""
     normalized: dict[int, str] = {}
@@ -270,7 +288,9 @@ class DccExClient:
         self._train_callbacks: dict[int, set[TrainUpdateCallback]] = {}
         self._accessory_callbacks: dict[str, set[AccessoryUpdateCallback]] = {}
         self._connection_callbacks: set[ConnectionCallback] = set()
-        self._power_callbacks: set[PowerCallback] = set()
+        self._power_callbacks: dict[str, set[PowerCallback]] = {
+            track: set() for track in TRACKS
+        }
         self._known_speed: dict[int, int] = {}
         self._known_forward: dict[int, bool] = {}
         self._known_functions: dict[int, dict[int, bool]] = {}
@@ -278,7 +298,11 @@ class DccExClient:
         self._sound_levels: dict[int, int] = {}
         self._accessory_states: dict[str, bool] = {}
         self._acquired_trains: set[int] = set()
-        self._power_on: bool | None = None
+        self._power_on: dict[str, bool | None] = {
+            TRACK_MAIN: None,
+            TRACK_PROG: None,
+            TRACK_ALL: None,
+        }
         self.connected = False
 
     @property
@@ -341,13 +365,17 @@ class DccExClient:
 
         return _unsubscribe
 
-    def subscribe_power(self, callback: PowerCallback) -> Callable[[], None]:
+    def subscribe_power(
+        self, track: str, callback: PowerCallback
+    ) -> Callable[[], None]:
         """Subscribe to track power state changes."""
-        self._power_callbacks.add(callback)
-        callback(self._power_on)
+        track = normalize_track(track)
+        callbacks = self._power_callbacks.setdefault(track, set())
+        callbacks.add(callback)
+        callback(self.get_power_state(track))
 
         def _unsubscribe() -> None:
-            self._power_callbacks.discard(callback)
+            callbacks.discard(callback)
 
         return _unsubscribe
 
@@ -387,19 +415,24 @@ class DccExClient:
         await self.async_send_raw("<s>")
         await self.async_send_raw("<c>")
 
-    async def async_set_power(self, on: bool, track: str = "MAIN") -> None:
+    async def async_set_power(self, on: bool, track: str | None = TRACK_MAIN) -> None:
         """Set DCC-EX track power."""
-        self._set_power_state(on)
-        await self.async_send_raw(f"<{1 if on else 0} {track}>")
+        command_track = normalize_track(track)
+        self._set_power_state(command_track, on)
+        if command_track == TRACK_ALL:
+            await self.async_send_raw(f"<{1 if on else 0}>")
+        else:
+            await self.async_send_raw(f"<{1 if on else 0} {command_track}>")
 
-    def get_power_state(self) -> bool | None:
+    def get_power_state(self, track: str = TRACK_MAIN) -> bool | None:
         """Return the last commanded power state."""
-        return self._power_on
+        return self._power_on.get(normalize_track(track))
 
-    def restore_power_state(self, on: bool) -> None:
+    def restore_power_state(self, track: str, on: bool) -> None:
         """Restore the last Home Assistant power state without commanding DCC-EX."""
-        if self._power_on is None:
-            self._set_power_state(on)
+        track = normalize_track(track)
+        if self._power_on.get(track) is None:
+            self._set_power_state(track, on)
 
     def get_speed(self, address: int) -> int:
         """Return the last known speed for an address."""
@@ -621,10 +654,12 @@ class DccExClient:
             power_match = POWER_BROADCAST.match(message)
             if power_match:
                 state = power_match.group("state").lower()
-                self._set_power_state(state in {"1", "on"})
+                self._set_power_state(TRACK_ALL, state in {"1", "on"})
             elif current_match := CURRENT_REPORT.match(message):
-                if self._power_on is None:
-                    self._set_power_state(int(current_match.group("current")) > 0)
+                if self.get_power_state(TRACK_ALL) is None:
+                    self._set_power_state(
+                        TRACK_ALL, int(current_match.group("current")) > 0
+                    )
             elif message.startswith("<-"):
                 _LOGGER.debug("DCC-EX released locomotive: %s", message)
                 return
@@ -683,13 +718,25 @@ class DccExClient:
             self._sound_levels[address] = -1
             self._notify_train(address)
 
-    def _set_power_state(self, on: bool | None) -> None:
+    def _set_power_state(self, track: str, on: bool | None) -> None:
         """Update track power state and notify listeners."""
-        self._power_on = on
-        if on is not None:
+        track = normalize_track(track)
+        if track == TRACK_ALL:
+            tracks = [TRACK_MAIN, TRACK_PROG, TRACK_ALL]
+        else:
+            tracks = [track]
+        for item in tracks:
+            self._power_on[item] = on
+        if track in {TRACK_MAIN, TRACK_PROG}:
+            main = self._power_on[TRACK_MAIN]
+            prog = self._power_on[TRACK_PROG]
+            self._power_on[TRACK_ALL] = main if main == prog else None
+            tracks.append(TRACK_ALL)
+        if on is not None and track in {TRACK_MAIN, TRACK_ALL}:
             self._mark_power_state(on)
-        for callback in list(self._power_callbacks):
-            callback(on)
+        for item in set(tracks):
+            for callback in list(self._power_callbacks.get(item, ())):
+                callback(self._power_on[item])
 
     def _notify_train(self, address: int) -> None:
         """Notify train listeners when local state changes."""

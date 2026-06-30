@@ -120,7 +120,7 @@
         }
       },
       "configure_function_details": {
-        "title": "Configure F key",
+        "title": "Configure F keys",
         "data": {
           "function_name": "Friendly name",
           "control_type": "Control type",

@@ -6,12 +6,12 @@ Custom Home Assistant integration for controlling model trains directly through 
 
 ## Version
 
-`1.6.7`
+`1.6.8`
 
 ## What it creates
 
 - One controller sensor for the configured DCC-EX command station.
-- Controller controls for track power and global emergency stop.
+- Controller controls for Main, Programming, and All Tracks power plus global emergency stop.
 - One train device per configured locomotive.
 - Train controls for speed, direction, stop, emergency stop, and mapped DCC functions.
 - Train acquired state plus numeric and labeled sound-state controls for sound decoders.

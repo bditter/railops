@@ -319,7 +319,7 @@ class RailOpsOptionsFlow(config_entries.OptionsFlow):
         """Choose a train for F-key setup."""
         if user_input is not None:
             self._selected_train_id = user_input[ATTR_TRAIN_ID]
-            return await self.async_step_configure_function()
+            return await self.async_step_configure_function_details()
         return self.async_show_form(
             step_id="configure_functions",
             data_schema=vol.Schema(
@@ -331,46 +331,21 @@ class RailOpsOptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Choose an F key to configure."""
-        train = self._trains_by_id[self._selected_train_id]
-        if user_input is not None:
-            self._selected_function_number = int(user_input[ATTR_FUNCTION_NUMBER])
-            return await self.async_step_configure_function_details()
-        return self.async_show_form(
-            step_id="configure_function",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(ATTR_FUNCTION_NUMBER): vol.In(
-                        _function_options(train)
-                    )
-                }
-            ),
-        )
+        return await self.async_step_configure_function_details(user_input)
 
     async def async_step_configure_function_details(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Edit one F key's name, control type, and visibility."""
+        """Edit all F keys for the selected train."""
         trains = self._trains_by_id
         train = trains[self._selected_train_id]
-        function_number = self._selected_function_number
         if user_input is not None:
-            _set_function_mapping_data(train, function_number, user_input)
-            _set_function_control_data(
-                train, {**user_input, ATTR_FUNCTION_NUMBER: function_number}
-            )
+            _set_all_function_data(train, user_input)
             trains[self._selected_train_id] = train
-            self.hass.config_entries.async_update_entry(
-                self._config_entry,
-                options={
-                    **self._config_entry.options,
-                    OPT_TRAINS: list(trains.values()),
-                    OPT_ACCESSORIES: list(self._accessories_by_id.values()),
-                },
-            )
-            return await self.async_step_configure_function()
+            return self._create_entry(trains, self._accessories_by_id)
         return self.async_show_form(
             step_id="configure_function_details",
-            data_schema=_function_schema(train, function_number),
+            data_schema=_functions_schema(train),
         )
 
     async def async_step_set_function_mapping(
@@ -580,45 +555,46 @@ def _normalize_train(data: dict[str, Any]) -> dict[str, Any]:
     return train
 
 
-def _function_options(train: dict[str, Any]) -> dict[int, str]:
-    """Return F-key choices with current labels and visibility."""
-    train_config = TrainConfig.from_dict(train)
-    return {
-        function_number: (
-            f"{train_config.function_label(function_number)}"
-            f"{'' if train_config.function_enabled(function_number) else ' (disabled)'}"
-        )
-        for function_number in range(29)
-    }
-
-
-def _function_schema(train: dict[str, Any], function_number: int) -> vol.Schema:
+def _functions_schema(train: dict[str, Any]) -> vol.Schema:
     """Return the all-in-one F-key setup schema."""
     train_config = TrainConfig.from_dict(train)
-    return vol.Schema(
-        {
+    schema: dict[Any, Any] = {}
+    for function_number in range(29):
+        schema[
             vol.Optional(
-                ATTR_FUNCTION_NAME,
+                _function_field(function_number, "name"),
                 default=_function_display_name(train_config, function_number),
-            ): str,
+            )
+        ] = str
+        schema[
             vol.Required(
-                ATTR_CONTROL_TYPE,
+                _function_field(function_number, "control type"),
                 default=train_config.function_control_type(function_number),
-            ): vol.In(
+            )
+        ] = vol.In(
                 {
                     CONTROL_TYPE_SWITCH: "Switch",
                     CONTROL_TYPE_BUTTON: "Button",
                 }
-            ),
+        )
+        schema[
             vol.Optional(
-                ATTR_PULSE_DURATION,
+                _function_field(function_number, "pulse duration"),
                 default=train_config.function_pulse_duration(function_number),
-            ): vol.All(vol.Coerce(float), vol.Range(min=0.05, max=10)),
+            )
+        ] = vol.All(vol.Coerce(float), vol.Range(min=0.05, max=10))
+        schema[
             vol.Optional(
-                "enabled", default=train_config.function_enabled(function_number)
-            ): bool,
-        }
-    )
+                _function_field(function_number, "enabled"),
+                default=train_config.function_enabled(function_number),
+            )
+        ] = bool
+    return vol.Schema(schema)
+
+
+def _function_field(function_number: int, field: str) -> str:
+    """Return a readable field name for an F-key setting."""
+    return f"F{function_number} {field}"
 
 
 def _function_display_name(train: TrainConfig, function_number: int) -> str:
@@ -644,6 +620,32 @@ def _set_function_mapping_data(
     if name:
         functions[name] = function_number
     train[ATTR_FUNCTIONS] = functions
+
+
+def _set_all_function_data(train: dict[str, Any], data: dict[str, Any]) -> None:
+    """Persist the all-in-one F-key setup form."""
+    functions: dict[str, int] = {}
+    controls: dict[str, str] = {}
+    durations: dict[str, float] = {}
+    disabled: list[int] = []
+    for function_number in range(29):
+        name = _normalize_function_name(
+            data.get(_function_field(function_number, "name"), "")
+        )
+        if name:
+            functions[name] = function_number
+        controls[str(function_number)] = data[
+            _function_field(function_number, "control type")
+        ]
+        durations[str(function_number)] = float(
+            data.get(_function_field(function_number, "pulse duration"), 0.35)
+        )
+        if not data.get(_function_field(function_number, "enabled"), True):
+            disabled.append(function_number)
+    train[ATTR_FUNCTIONS] = functions
+    train[ATTR_FUNCTION_CONTROLS] = controls
+    train["function_pulse_durations"] = durations
+    train[ATTR_DISABLED_FUNCTIONS] = disabled
 
 
 def _set_function_control_data(train: dict[str, Any], data: dict[str, Any]) -> None:

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.8
+
+- Adds separate controller switches for Main Track Power, Programming Track Power, and All Track Power.
+- Changes Configure F keys to edit all F0-F28 settings for a locomotive on one saveable form.
+
 ## 1.6.7
 
 - Updates existing F-key entity names in the Home Assistant entity registry when function mappings change.

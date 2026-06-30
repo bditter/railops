@@ -11,7 +11,14 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .client import AccessoryConfig, DccExClient, TrainConfig
+from .client import (
+    AccessoryConfig,
+    DccExClient,
+    TRACK_ALL,
+    TRACK_MAIN,
+    TRACK_PROG,
+    TrainConfig,
+)
 from .const import DATA_CLIENT, DOMAIN, OPT_ACCESSORIES, OPT_TRAINS
 from .entity import RailOpsControllerEntity, RailOpsTrainEntity
 
@@ -23,7 +30,17 @@ async def async_setup_entry(
 ) -> None:
     """Set up RailOps switch entities."""
     client: DccExClient = hass.data[DOMAIN][entry.entry_id][DATA_CLIENT]
-    entities: list[SwitchEntity] = [RailOpsPowerSwitch(entry, client)]
+    entities: list[SwitchEntity] = [
+        RailOpsPowerSwitch(
+            entry, client, TRACK_MAIN, "Main Track Power", "track_power"
+        ),
+        RailOpsPowerSwitch(
+            entry, client, TRACK_PROG, "Programming Track Power", "track_power_prog"
+        ),
+        RailOpsPowerSwitch(
+            entry, client, TRACK_ALL, "All Track Power", "track_power_all"
+        ),
+    ]
     for train_data in entry.options.get(OPT_TRAINS, []):
         train = TrainConfig.from_dict(train_data)
         entities.extend(
@@ -44,38 +61,46 @@ class RailOpsPowerSwitch(RailOpsControllerEntity, SwitchEntity, RestoreEntity):
 
     _attr_icon = "mdi:power"
 
-    def __init__(self, entry: ConfigEntry, client: DccExClient) -> None:
+    def __init__(
+        self,
+        entry: ConfigEntry,
+        client: DccExClient,
+        track: str,
+        name: str,
+        unique_suffix: str,
+    ) -> None:
         """Initialize the power switch."""
         super().__init__(entry, client)
-        self._attr_unique_id = f"controller_{entry.entry_id}_track_power"
-        self._attr_name = "Track Power"
+        self._track = track
+        self._attr_unique_id = f"controller_{entry.entry_id}_{unique_suffix}"
+        self._attr_name = name
         self._unsub: Callable[[], None] | None = None
 
     @property
     def is_on(self) -> bool | None:
         """Return the last commanded power state."""
-        return self._client.get_power_state()
+        return self._client.get_power_state(self._track)
 
     async def async_turn_on(self, **kwargs) -> None:
         """Turn track power on."""
-        await self._client.async_set_power(True)
+        await self._client.async_set_power(True, self._track)
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs) -> None:
         """Turn track power off."""
-        await self._client.async_set_power(False)
+        await self._client.async_set_power(False, self._track)
         self.async_write_ha_state()
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to track power updates."""
         last_state = await self.async_get_last_state()
         if (
-            self._client.get_power_state() is None
+            self._client.get_power_state(self._track) is None
             and last_state
             and last_state.state in {STATE_ON, STATE_OFF}
         ):
-            self._client.restore_power_state(last_state.state == STATE_ON)
-        self._unsub = self._client.subscribe_power(self._power_updated)
+            self._client.restore_power_state(self._track, last_state.state == STATE_ON)
+        self._unsub = self._client.subscribe_power(self._track, self._power_updated)
 
     async def async_will_remove_from_hass(self) -> None:
         """Unsubscribe from track power updates."""
