@@ -77,9 +77,9 @@ class RailOpsPowerSwitch(RailOpsControllerEntity, SwitchEntity, RestoreEntity):
         self._unsub: Callable[[], None] | None = None
 
     @property
-    def is_on(self) -> bool | None:
+    def is_on(self) -> bool:
         """Return the last commanded power state."""
-        return self._client.get_power_state(self._track)
+        return self._client.get_power_state(self._track) is True
 
     async def async_turn_on(self, **kwargs) -> None:
         """Turn track power on."""

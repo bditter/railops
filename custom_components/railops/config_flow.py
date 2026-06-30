@@ -562,6 +562,12 @@ def _functions_schema(train: dict[str, Any]) -> vol.Schema:
     for function_number in range(29):
         schema[
             vol.Optional(
+                _function_field(function_number, "enabled"),
+                default=train_config.function_enabled(function_number),
+            )
+        ] = bool
+        schema[
+            vol.Optional(
                 _function_field(function_number, "name"),
                 default=_function_display_name(train_config, function_number),
             )
@@ -583,12 +589,6 @@ def _functions_schema(train: dict[str, Any]) -> vol.Schema:
                 default=train_config.function_pulse_duration(function_number),
             )
         ] = vol.All(vol.Coerce(float), vol.Range(min=0.05, max=10))
-        schema[
-            vol.Optional(
-                _function_field(function_number, "enabled"),
-                default=train_config.function_enabled(function_number),
-            )
-        ] = bool
     return vol.Schema(schema)
 
 

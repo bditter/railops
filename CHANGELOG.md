@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.9
+
+- Reorders bulk F-key setup so each F key starts with its enabled checkbox, followed by name, control type, and pulse duration.
+- Keeps track-power controls rendered as toggles when a track-specific state is initially unknown.
+
 ## 1.6.8
 
 - Adds separate controller switches for Main Track Power, Programming Track Power, and All Track Power.
